@@ -1,63 +1,48 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  computeAtsV1,
+  createEmptyResumeData,
+  hasAnyPreviewContent,
+  loadResumeData,
+  saveResumeData,
+  splitBullets,
+  splitSkills,
+  type ResumeBuilderData
+} from '../lib/resumeData';
 
-type PersonalInfo = {
-  name: string;
-  email: string;
-  phone: string;
-  location: string;
-};
-
-type EducationEntry = {
-  school: string;
-  degree: string;
-  year: string;
-};
-
-type ExperienceEntry = {
-  company: string;
-  role: string;
-  duration: string;
-};
-
-type ProjectEntry = {
-  name: string;
-  description: string;
-};
-
-type BuilderData = {
-  personal: PersonalInfo;
-  summary: string;
-  education: EducationEntry[];
-  experience: ExperienceEntry[];
-  projects: ProjectEntry[];
-  skills: string;
-  github: string;
-  linkedin: string;
-};
-
-const emptyData = (): BuilderData => ({
-  personal: { name: '', email: '', phone: '', location: '' },
-  summary: '',
-  education: [{ school: '', degree: '', year: '' }],
-  experience: [{ company: '', role: '', duration: '' }],
-  projects: [{ name: '', description: '' }],
-  skills: '',
-  github: '',
-  linkedin: ''
-});
-
-const sampleData = (): BuilderData => ({
+const sampleData = (): ResumeBuilderData => ({
   personal: {
     name: 'Alex Carter',
     email: 'alex.carter@email.com',
     phone: '+1 (555) 100-2000',
     location: 'Austin, TX'
   },
-  summary: 'Product-focused software engineer with strong ownership across frontend and backend delivery.',
-  education: [{ school: 'State University', degree: 'B.S. Computer Science', year: '2024' }],
-  experience: [{ company: 'Nexa Labs', role: 'Software Engineer', duration: '2024 - Present' }],
-  projects: [{ name: 'Portfolio Platform', description: 'Built modular web experience for client showcases.' }],
-  skills: 'React, TypeScript, Node.js, SQL, Git',
+  summary:
+    'Product-focused software engineer with experience building full-stack applications, improving developer workflows, and shipping user-facing features with measurable outcomes across frontend and backend systems. Strong in React, TypeScript, Node.js, and API design with a focus on reliable delivery and clean architecture.',
+  education: [
+    { school: 'State University', degree: 'B.S. Computer Science', year: '2024' }
+  ],
+  experience: [
+    {
+      company: 'Nexa Labs',
+      role: 'Software Engineer',
+      duration: '2024 - Present',
+      highlights: 'Improved page load speed by 32% across core workflows.\nReduced incident count by 18% using release guardrails.'
+    }
+  ],
+  projects: [
+    {
+      name: 'Portfolio Platform',
+      description: 'Modular web experience for client showcases.',
+      highlights: 'Increased session duration by 24% after redesign.'
+    },
+    {
+      name: 'Support Automation Tool',
+      description: 'Internal ticket routing assistant.',
+      highlights: 'Cut average routing time from 12 minutes to 3 minutes.'
+    }
+  ],
+  skills: 'React, TypeScript, Node.js, SQL, Git, REST APIs, Testing, CI/CD',
   github: 'https://github.com/example',
   linkedin: 'https://linkedin.com/in/example'
 });
@@ -65,12 +50,52 @@ const sampleData = (): BuilderData => ({
 const updateListItem = <T,>(items: T[], index: number, next: T): T[] =>
   items.map((item, i) => (i === index ? next : item));
 
-export default function BuilderPage() {
-  const [data, setData] = useState<BuilderData>(emptyData);
+const isEducationVisible = (entry: ResumeBuilderData['education'][number]): boolean =>
+  [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0);
 
-  const skillsList = useMemo(
-    () => data.skills.split(',').map((item) => item.trim()).filter(Boolean),
-    [data.skills]
+const isExperienceVisible = (entry: ResumeBuilderData['experience'][number]): boolean =>
+  [entry.company, entry.role, entry.duration, entry.highlights].some((value) => value.trim().length > 0);
+
+const isProjectVisible = (entry: ResumeBuilderData['projects'][number]): boolean =>
+  [entry.name, entry.description, entry.highlights].some((value) => value.trim().length > 0);
+
+const scoreTone = (score: number): 'low' | 'mid' | 'high' => {
+  if (score < 40) {
+    return 'low';
+  }
+  if (score < 75) {
+    return 'mid';
+  }
+  return 'high';
+};
+
+export default function BuilderPage() {
+  const [data, setData] = useState<ResumeBuilderData>(() => {
+    if (typeof window === 'undefined') {
+      return createEmptyResumeData();
+    }
+    return loadResumeData();
+  });
+
+  useEffect(() => {
+    saveResumeData(data);
+  }, [data]);
+
+  const skillsList = useMemo(() => splitSkills(data.skills), [data.skills]);
+  const ats = useMemo(() => computeAtsV1(data), [data]);
+  const previewHasContent = useMemo(() => hasAnyPreviewContent(data), [data]);
+
+  const visibleEducation = useMemo(
+    () => data.education.filter(isEducationVisible),
+    [data.education]
+  );
+  const visibleExperience = useMemo(
+    () => data.experience.filter(isExperienceVisible),
+    [data.experience]
+  );
+  const visibleProjects = useMemo(
+    () => data.projects.filter(isProjectVisible),
+    [data.projects]
   );
 
   return (
@@ -81,6 +106,23 @@ export default function BuilderPage() {
             <h1>Resume Builder</h1>
             <button type="button" onClick={() => setData(sampleData())}>Load Sample Data</button>
           </div>
+
+          <section className="ats-card" aria-live="polite">
+            <div className="ats-head">
+              <h2>ATS Readiness Score</h2>
+              <strong>{ats.score}/100</strong>
+            </div>
+            <div className="ats-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={ats.score}>
+              <div className={`ats-fill ${scoreTone(ats.score)}`} style={{ width: `${ats.score}%` }} />
+            </div>
+            {ats.suggestions.length > 0 && (
+              <ul className="ats-suggestions">
+                {ats.suggestions.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <h2>Personal Info</h2>
           <div className="form-grid-two">
@@ -189,12 +231,27 @@ export default function BuilderPage() {
                   })
                 }
               />
+              <textarea
+                placeholder="Highlights (one bullet per line)"
+                value={entry.highlights}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    experience: updateListItem(data.experience, index, { ...entry, highlights: e.target.value })
+                  })
+                }
+              />
             </div>
           ))}
           <button
             type="button"
             className="ghost-button"
-            onClick={() => setData({ ...data, experience: [...data.experience, { company: '', role: '', duration: '' }] })}
+            onClick={() =>
+              setData({
+                ...data,
+                experience: [...data.experience, { company: '', role: '', duration: '', highlights: '' }]
+              })
+            }
           >
             Add Experience
           </button>
@@ -222,12 +279,27 @@ export default function BuilderPage() {
                   })
                 }
               />
+              <textarea
+                placeholder="Highlights (one bullet per line)"
+                value={entry.highlights}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    projects: updateListItem(data.projects, index, { ...entry, highlights: e.target.value })
+                  })
+                }
+              />
             </div>
           ))}
           <button
             type="button"
             className="ghost-button"
-            onClick={() => setData({ ...data, projects: [...data.projects, { name: '', description: '' }] })}
+            onClick={() =>
+              setData({
+                ...data,
+                projects: [...data.projects, { name: '', description: '', highlights: '' }]
+              })
+            }
           >
             Add Project
           </button>
@@ -256,57 +328,99 @@ export default function BuilderPage() {
 
         <aside className="builder-preview-card">
           <h2>Live Preview</h2>
+
           <div className="resume-shell">
-            <section>
-              <h3>{data.personal.name || 'Your Name'}</h3>
-              <p>
-                {data.personal.email || 'email@example.com'} | {data.personal.phone || '+1 (000) 000-0000'} |{' '}
-                {data.personal.location || 'City, Country'}
-              </p>
-            </section>
+            {previewHasContent ? (
+              <>
+                {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
+                  <section>
+                    {data.personal.name && <h3>{data.personal.name}</h3>}
+                    <p>
+                      {[data.personal.email, data.personal.phone, data.personal.location]
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                        .join(' | ')}
+                    </p>
+                  </section>
+                )}
 
-            <section>
-              <h4>Summary</h4>
-              <p>{data.summary || 'Summary placeholder for live structured layout.'}</p>
-            </section>
+                {data.summary.trim().length > 0 && (
+                  <section>
+                    <h4>Summary</h4>
+                    <p>{data.summary}</p>
+                  </section>
+                )}
 
-            <section>
-              <h4>Education</h4>
-              {data.education.map((entry, index) => (
-                <p key={`prev-edu-${index}`}>
-                  {(entry.degree || 'Degree')} - {(entry.school || 'School')} ({entry.year || 'Year'})
-                </p>
-              ))}
-            </section>
+                {visibleEducation.length > 0 && (
+                  <section>
+                    <h4>Education</h4>
+                    {visibleEducation.map((entry, index) => (
+                      <p key={`prev-edu-${index}`}>
+                        {[entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ')}
+                        {entry.year.trim().length > 0 ? ` (${entry.year.trim()})` : ''}
+                      </p>
+                    ))}
+                  </section>
+                )}
 
-            <section>
-              <h4>Experience</h4>
-              {data.experience.map((entry, index) => (
-                <p key={`prev-exp-${index}`}>
-                  {(entry.role || 'Role')} - {(entry.company || 'Company')} ({entry.duration || 'Duration'})
-                </p>
-              ))}
-            </section>
+                {visibleExperience.length > 0 && (
+                  <section>
+                    <h4>Experience</h4>
+                    {visibleExperience.map((entry, index) => (
+                      <div key={`prev-exp-${index}`} className="preview-entry">
+                        <p>
+                          {[entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ')}
+                          {entry.duration.trim().length > 0 ? ` (${entry.duration.trim()})` : ''}
+                        </p>
+                        {splitBullets(entry.highlights).length > 0 && (
+                          <ul>
+                            {splitBullets(entry.highlights).map((line) => (
+                              <li key={`${line}-${index}`}>{line}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                )}
 
-            <section>
-              <h4>Projects</h4>
-              {data.projects.map((entry, index) => (
-                <p key={`prev-proj-${index}`}>
-                  {(entry.name || 'Project Name')}: {entry.description || 'Project description placeholder.'}
-                </p>
-              ))}
-            </section>
+                {visibleProjects.length > 0 && (
+                  <section>
+                    <h4>Projects</h4>
+                    {visibleProjects.map((entry, index) => (
+                      <div key={`prev-proj-${index}`} className="preview-entry">
+                        {entry.name.trim().length > 0 && <p>{entry.name.trim()}</p>}
+                        {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
+                        {splitBullets(entry.highlights).length > 0 && (
+                          <ul>
+                            {splitBullets(entry.highlights).map((line) => (
+                              <li key={`${line}-${index}`}>{line}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                )}
 
-            <section>
-              <h4>Skills</h4>
-              <p>{skillsList.length > 0 ? skillsList.join(', ') : 'Skills placeholder.'}</p>
-            </section>
+                {skillsList.length > 0 && (
+                  <section>
+                    <h4>Skills</h4>
+                    <p>{skillsList.join(', ')}</p>
+                  </section>
+                )}
 
-            <section>
-              <h4>Links</h4>
-              <p>GitHub: {data.github || 'github.com/username'}</p>
-              <p>LinkedIn: {data.linkedin || 'linkedin.com/in/username'}</p>
-            </section>
+                {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
+                  <section>
+                    <h4>Links</h4>
+                    {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
+                    {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
+                  </section>
+                )}
+              </>
+            ) : (
+              <p>Start filling the form to generate a live preview.</p>
+            )}
           </div>
         </aside>
       </section>
