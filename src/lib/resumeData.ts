@@ -38,6 +38,7 @@ export type ResumeBuilderData = {
 export type AtsResult = {
   score: number;
   suggestions: string[];
+  allCriteriaMet: boolean;
 };
 
 export const RESUME_STORAGE_KEY = 'resumeBuilderData';
@@ -207,7 +208,8 @@ export const computeAtsV1 = (data: ResumeBuilderData): AtsResult => {
 
   return {
     score: Math.min(100, score),
-    suggestions: suggestions.slice(0, 3)
+    suggestions: suggestions.slice(0, 3),
+    allCriteriaMet: suggestions.length === 0
   };
 };
 

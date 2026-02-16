@@ -104,7 +104,12 @@ export default function BuilderPage() {
         <section className="builder-form-card">
           <div className="section-head">
             <h1>Resume Builder</h1>
-            <button type="button" onClick={() => setData(sampleData())}>Load Sample Data</button>
+            <div className="head-actions">
+              <button type="button" onClick={() => setData(sampleData())}>Load Sample Data</button>
+              <button type="button" className="ghost-button" onClick={() => setData(createEmptyResumeData())}>
+                Clear Form
+              </button>
+            </div>
           </div>
 
           <section className="ats-card" aria-live="polite">
@@ -115,12 +120,15 @@ export default function BuilderPage() {
             <div className="ats-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={ats.score}>
               <div className={`ats-fill ${scoreTone(ats.score)}`} style={{ width: `${ats.score}%` }} />
             </div>
-            {ats.suggestions.length > 0 && (
+            <h3 className="ats-subtitle">Suggestions</h3>
+            {ats.suggestions.length > 0 ? (
               <ul className="ats-suggestions">
                 {ats.suggestions.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+            ) : (
+              <p className="ats-good">Strong baseline. No immediate ATS gaps detected.</p>
             )}
           </section>
 
