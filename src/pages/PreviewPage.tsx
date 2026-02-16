@@ -46,6 +46,8 @@ export default function PreviewPage() {
   const experience = useMemo(() => data.experience.filter(isExperienceVisible), [data.experience]);
   const projects = useMemo(() => data.projects.filter(isProjectVisible), [data.projects]);
   const hasContent = useMemo(() => hasAnyPreviewContent(data), [data]);
+  const [copyLabel, setCopyLabel] = useState<string>('Copy Resume as Text');
+  const [warning, setWarning] = useState<string>('');
 
   return (
     <main className="page page-preview">
@@ -62,6 +64,93 @@ export default function PreviewPage() {
             </button>
           ))}
         </div>
+
+        <div className="preview-toolbar">
+          <button
+            type="button"
+            onClick={() => {
+              const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
+              setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
+              window.print();
+            }}
+          >
+            Print / Save as PDF
+          </button>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={async () => {
+              const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
+              setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
+
+              const lines: string[] = [];
+              if (data.personal.name.trim().length > 0) {
+                lines.push(data.personal.name.trim());
+              }
+
+              const contact = [data.personal.email, data.personal.phone, data.personal.location]
+                .map((value) => value.trim())
+                .filter(Boolean)
+                .join(' | ');
+              if (contact.length > 0) {
+                lines.push(`Contact: ${contact}`);
+              }
+
+              if (data.summary.trim().length > 0) {
+                lines.push('', 'Summary', data.summary.trim());
+              }
+              if (education.length > 0) {
+                lines.push('', 'Education');
+                education.forEach((entry) => {
+                  const primary = [entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ');
+                  const year = entry.year.trim();
+                  lines.push(year.length > 0 ? `${primary} (${year})` : primary);
+                });
+              }
+              if (experience.length > 0) {
+                lines.push('', 'Experience');
+                experience.forEach((entry) => {
+                  const heading = [entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ');
+                  const duration = entry.duration.trim();
+                  lines.push(duration.length > 0 ? `${heading} (${duration})` : heading);
+                  splitBullets(entry.highlights).forEach((line) => lines.push(`- ${line}`));
+                });
+              }
+              if (projects.length > 0) {
+                lines.push('', 'Projects');
+                projects.forEach((entry) => {
+                  if (entry.name.trim().length > 0) {
+                    lines.push(entry.name.trim());
+                  }
+                  if (entry.description.trim().length > 0) {
+                    lines.push(entry.description.trim());
+                  }
+                  splitBullets(entry.highlights).forEach((line) => lines.push(`- ${line}`));
+                });
+              }
+              if (skills.length > 0) {
+                lines.push('', 'Skills', skills.join(', '));
+              }
+              if (data.github.trim().length > 0 || data.linkedin.trim().length > 0) {
+                lines.push('', 'Links');
+                if (data.github.trim().length > 0) {
+                  lines.push(`GitHub: ${data.github.trim()}`);
+                }
+                if (data.linkedin.trim().length > 0) {
+                  lines.push(`LinkedIn: ${data.linkedin.trim()}`);
+                }
+              }
+
+              await navigator.clipboard.writeText(lines.join('\n'));
+              setCopyLabel('Copied');
+              window.setTimeout(() => setCopyLabel('Copy Resume as Text'), 1600);
+            }}
+          >
+            {copyLabel}
+          </button>
+        </div>
+
+        {warning.length > 0 && <p className="preview-warning">{warning}</p>}
 
         <article className={`resume-preview-sheet template-${template}`}>
           {hasContent ? (

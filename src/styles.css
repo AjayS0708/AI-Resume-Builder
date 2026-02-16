@@ -384,6 +384,18 @@ h4 {
   width: min(940px, 100%);
 }
 
+.preview-toolbar {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.preview-warning {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+}
+
 .template-classic {
   border-width: 1px;
 }
@@ -410,6 +422,76 @@ h4 {
 .template-minimal h4 {
   font-size: 18px;
   margin-bottom: var(--space-2);
+}
+
+@media print {
+  :root {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .top-nav-wrap,
+  .template-tabs,
+  .preview-toolbar,
+  .preview-warning {
+    display: none !important;
+  }
+
+  .app-shell,
+  .page,
+  .page-preview,
+  .preview-frame {
+    display: block;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    min-height: 0;
+    background: #ffffff;
+  }
+
+  .resume-preview-sheet {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 18mm 14mm;
+    border: none;
+    background: #ffffff;
+    color: #000000;
+    box-shadow: none;
+    display: block;
+  }
+
+  .resume-preview-sheet * {
+    color: #000000 !important;
+    background: transparent !important;
+  }
+
+  .resume-preview-sheet section,
+  .resume-preview-sheet .preview-entry,
+  .resume-preview-sheet li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .resume-preview-sheet h1,
+  .resume-preview-sheet h2,
+  .resume-preview-sheet h3,
+  .resume-preview-sheet h4,
+  .resume-preview-sheet p,
+  .resume-preview-sheet li {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  @page {
+    size: auto;
+    margin: 12mm;
+  }
 }
 
 .page-proof {
