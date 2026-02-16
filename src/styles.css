@@ -35,6 +35,8 @@ a {
   padding: var(--space-6);
   display: grid;
   gap: var(--space-6);
+  align-content: start;
+  grid-auto-rows: max-content;
 }
 
 .top-nav-wrap {
@@ -170,6 +172,11 @@ textarea {
   flex-wrap: wrap;
 }
 
+.section-inline-head {
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-3);
+}
+
 .template-tabs {
   display: flex;
   gap: var(--space-2);
@@ -281,6 +288,85 @@ textarea {
   border-color: #000000;
 }
 
+.counter-row {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+  margin-top: -4px;
+}
+
+.skill-category-block {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.skill-category-block h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 17px;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: #fafafa;
+}
+
+.chip-static {
+  margin-bottom: 0;
+}
+
+.chip-remove {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+  border-radius: 999px;
+}
+
+.project-accordion-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+.project-accordion-header {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: #fafafa;
+  color: var(--ink);
+  border-radius: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  padding: var(--space-3);
+}
+
+.project-accordion-body {
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-3);
+}
+
 h1,
 h2,
 h3,
@@ -336,6 +422,46 @@ h4 {
 .preview-entry ul {
   margin: var(--space-2) 0 0;
   padding-left: var(--space-6);
+}
+
+.project-card-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.project-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.project-card h5 {
+  margin: 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 16px;
+}
+
+.project-links {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.project-links a {
+  color: #000;
+  text-decoration: none;
+  border-bottom: 1px solid #000;
+}
+
+.skill-preview-group {
+  margin-bottom: var(--space-3);
+}
+
+.skill-preview-group p {
+  margin-bottom: var(--space-2);
+  font-weight: 600;
 }
 
 .page-preview {

@@ -3,6 +3,7 @@ import {
   computeAtsV1,
   computeTopImprovements,
   createEmptyResumeData,
+  getAllSkills,
   hasAnyPreviewContent,
   hasNumericIndicator,
   loadResumeData,
@@ -11,7 +12,6 @@ import {
   saveResumeData,
   saveResumeTemplate,
   splitBullets,
-  splitSkills,
   startsWithActionVerb,
   type ResumeBuilderData,
   type ResumeTemplate
@@ -26,9 +26,7 @@ const sampleData = (): ResumeBuilderData => ({
   },
   summary:
     'Product-focused software engineer with experience building full-stack applications, improving developer workflows, and shipping user-facing features with measurable outcomes across frontend and backend systems. Strong in React, TypeScript, Node.js, and API design with a focus on reliable delivery and clean architecture.',
-  education: [
-    { school: 'State University', degree: 'B.S. Computer Science', year: '2024' }
-  ],
+  education: [{ school: 'State University', degree: 'B.S. Computer Science', year: '2024' }],
   experience: [
     {
       company: 'Nexa Labs',
@@ -39,39 +37,34 @@ const sampleData = (): ResumeBuilderData => ({
   ],
   projects: [
     {
-      name: 'Portfolio Platform',
-      description: 'Modular web experience for client showcases.',
-      highlights: 'Increased session duration by 24% after redesign.'
-    },
-    {
-      name: 'Support Automation Tool',
-      description: 'Internal ticket routing assistant.',
-      highlights: 'Cut average routing time from 12 minutes to 3 minutes.'
+      title: 'Portfolio Platform',
+      description: 'Built modular web experience for client showcases and content operations.',
+      techStack: ['React', 'TypeScript'],
+      liveUrl: 'https://example.com',
+      githubUrl: 'https://github.com/example/portfolio',
+      highlights: 'Improved engagement by 24%'
     }
   ],
-  skills: 'React, TypeScript, Node.js, SQL, Git, REST APIs, Testing, CI/CD',
+  skillsByCategory: {
+    technical: ['React', 'TypeScript', 'Node.js'],
+    soft: ['Problem Solving'],
+    tools: ['Git']
+  },
+  skills: '',
   github: 'https://github.com/example',
   linkedin: 'https://linkedin.com/in/example'
 });
 
+type SkillCategoryKey = 'technical' | 'soft' | 'tools';
+
+const CATEGORY_META: Array<{ key: SkillCategoryKey; label: string }> = [
+  { key: 'technical', label: 'Technical Skills' },
+  { key: 'soft', label: 'Soft Skills' },
+  { key: 'tools', label: 'Tools & Technologies' }
+];
+
 const updateListItem = <T,>(items: T[], index: number, next: T): T[] =>
   items.map((item, i) => (i === index ? next : item));
-
-type BulletGuidance = {
-  line: string;
-  needsVerb: boolean;
-  needsNumber: boolean;
-};
-
-const getBulletGuidance = (text: string): BulletGuidance[] => {
-  return splitBullets(text)
-    .map((line) => ({
-      line,
-      needsVerb: !startsWithActionVerb(line),
-      needsNumber: !hasNumericIndicator(line)
-    }))
-    .filter((item) => item.needsVerb || item.needsNumber);
-};
 
 const isEducationVisible = (entry: ResumeBuilderData['education'][number]): boolean =>
   [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0);
@@ -80,7 +73,7 @@ const isExperienceVisible = (entry: ResumeBuilderData['experience'][number]): bo
   [entry.company, entry.role, entry.duration, entry.highlights].some((value) => value.trim().length > 0);
 
 const isProjectVisible = (entry: ResumeBuilderData['projects'][number]): boolean =>
-  [entry.name, entry.description, entry.highlights].some((value) => value.trim().length > 0);
+  [entry.title, entry.description, entry.liveUrl, entry.githubUrl, entry.highlights].some((value) => value.trim().length > 0) || entry.techStack.length > 0;
 
 const scoreTone = (score: number): 'low' | 'mid' | 'high' => {
   if (score < 40) {
@@ -90,6 +83,30 @@ const scoreTone = (score: number): 'low' | 'mid' | 'high' => {
     return 'mid';
   }
   return 'high';
+};
+
+const projectGuidance = (description: string): { needsVerb: boolean; needsNumber: boolean } | null => {
+  const text = description.trim();
+  if (!text) {
+    return null;
+  }
+  const needsVerb = !startsWithActionVerb(text);
+  const needsNumber = !hasNumericIndicator(text);
+  if (!needsVerb && !needsNumber) {
+    return null;
+  }
+  return { needsVerb, needsNumber };
+};
+
+const uniquePush = (arr: string[], value: string): string[] => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return arr;
+  }
+  if (arr.some((item) => item.toLowerCase() === normalized.toLowerCase())) {
+    return arr;
+  }
+  return [...arr, normalized];
 };
 
 export default function BuilderPage() {
@@ -105,6 +122,14 @@ export default function BuilderPage() {
     }
     return loadResumeTemplate();
   });
+  const [skillDrafts, setSkillDrafts] = useState<Record<SkillCategoryKey, string>>({
+    technical: '',
+    soft: '',
+    tools: ''
+  });
+  const [projectTechDrafts, setProjectTechDrafts] = useState<Record<number, string>>({});
+  const [skillSuggestLoading, setSkillSuggestLoading] = useState<boolean>(false);
+  const [openProjects, setOpenProjects] = useState<number[]>([0]);
 
   useEffect(() => {
     saveResumeData(data);
@@ -114,29 +139,17 @@ export default function BuilderPage() {
     saveResumeTemplate(template);
   }, [template]);
 
-  const skillsList = useMemo(() => splitSkills(data.skills), [data.skills]);
+  const skillsList = useMemo(() => getAllSkills(data), [data]);
   const ats = useMemo(() => computeAtsV1(data), [data]);
   const topImprovements = useMemo(() => computeTopImprovements(data), [data]);
   const previewHasContent = useMemo(() => hasAnyPreviewContent(data), [data]);
 
-  const visibleEducation = useMemo(
-    () => data.education.filter(isEducationVisible),
-    [data.education]
-  );
-  const visibleExperience = useMemo(
-    () => data.experience.filter(isExperienceVisible),
-    [data.experience]
-  );
-  const visibleProjects = useMemo(
-    () => data.projects.filter(isProjectVisible),
-    [data.projects]
-  );
+  const visibleEducation = useMemo(() => data.education.filter(isEducationVisible), [data.education]);
+  const visibleExperience = useMemo(() => data.experience.filter(isExperienceVisible), [data.experience]);
+  const visibleProjects = useMemo(() => data.projects.filter(isProjectVisible), [data.projects]);
 
   const clearEducationEntry = (index: number) => {
-    setData({
-      ...data,
-      education: updateListItem(data.education, index, { school: '', degree: '', year: '' })
-    });
+    setData({ ...data, education: updateListItem(data.education, index, { school: '', degree: '', year: '' }) });
   };
 
   const deleteEducationEntry = (index: number) => {
@@ -144,10 +157,7 @@ export default function BuilderPage() {
       clearEducationEntry(index);
       return;
     }
-    setData({
-      ...data,
-      education: data.education.filter((_, i) => i !== index)
-    });
+    setData({ ...data, education: data.education.filter((_, i) => i !== index) });
   };
 
   const clearExperienceEntry = (index: number) => {
@@ -162,16 +172,20 @@ export default function BuilderPage() {
       clearExperienceEntry(index);
       return;
     }
-    setData({
-      ...data,
-      experience: data.experience.filter((_, i) => i !== index)
-    });
+    setData({ ...data, experience: data.experience.filter((_, i) => i !== index) });
   };
 
   const clearProjectEntry = (index: number) => {
     setData({
       ...data,
-      projects: updateListItem(data.projects, index, { name: '', description: '', highlights: '' })
+      projects: updateListItem(data.projects, index, {
+        title: '',
+        description: '',
+        techStack: [],
+        liveUrl: '',
+        githubUrl: '',
+        highlights: ''
+      })
     });
   };
 
@@ -180,10 +194,86 @@ export default function BuilderPage() {
       clearProjectEntry(index);
       return;
     }
+    setData({ ...data, projects: data.projects.filter((_, i) => i !== index) });
+    setProjectTechDrafts((prev) => {
+      const next: Record<number, string> = {};
+      Object.keys(prev).forEach((key) => {
+        const current = Number(key);
+        if (current < index) {
+          next[current] = prev[current] ?? '';
+        }
+        if (current > index) {
+          next[current - 1] = prev[current] ?? '';
+        }
+      });
+      return next;
+    });
+    setOpenProjects((prev) => prev.filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+  };
+
+  const addSkill = (category: SkillCategoryKey, rawSkill: string) => {
+    const skill = rawSkill.trim();
+    if (!skill) {
+      return;
+    }
     setData({
       ...data,
-      projects: data.projects.filter((_, i) => i !== index)
+      skillsByCategory: {
+        ...data.skillsByCategory,
+        [category]: uniquePush(data.skillsByCategory[category], skill)
+      }
     });
+    setSkillDrafts({ ...skillDrafts, [category]: '' });
+  };
+
+  const removeSkill = (category: SkillCategoryKey, skill: string) => {
+    setData({
+      ...data,
+      skillsByCategory: {
+        ...data.skillsByCategory,
+        [category]: data.skillsByCategory[category].filter((item) => item !== skill)
+      }
+    });
+  };
+
+  const addProjectTech = (index: number, rawTech: string) => {
+    const tech = rawTech.trim();
+    if (!tech) {
+      return;
+    }
+    const entry = data.projects[index];
+    setData({
+      ...data,
+      projects: updateListItem(data.projects, index, {
+        ...entry,
+        techStack: uniquePush(entry.techStack, tech)
+      })
+    });
+    setProjectTechDrafts({ ...projectTechDrafts, [index]: '' });
+  };
+
+  const removeProjectTech = (index: number, tech: string) => {
+    const entry = data.projects[index];
+    setData({
+      ...data,
+      projects: updateListItem(data.projects, index, {
+        ...entry,
+        techStack: entry.techStack.filter((item) => item !== tech)
+      })
+    });
+  };
+
+  const toggleProject = (index: number) => {
+    setOpenProjects((prev) => (prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]));
+  };
+
+  const addProjectEntry = () => {
+    const nextIndex = data.projects.length;
+    setData({
+      ...data,
+      projects: [...data.projects, { title: '', description: '', techStack: [], liveUrl: '', githubUrl: '', highlights: '' }]
+    });
+    setOpenProjects((prev) => [...prev, nextIndex]);
   };
 
   return (
@@ -372,15 +462,21 @@ export default function BuilderPage() {
                   Delete Entry
                 </button>
               </div>
-              {getBulletGuidance(entry.highlights).length > 0 && (
+              {splitBullets(entry.highlights)
+                .map((line) => ({ line, needsVerb: !startsWithActionVerb(line), needsNumber: !hasNumericIndicator(line) }))
+                .filter((item) => item.needsVerb || item.needsNumber)
+                .length > 0 && (
                 <ul className="bullet-guidance">
-                  {getBulletGuidance(entry.highlights).map((item, bulletIndex) => (
-                    <li key={`${index}-exp-${bulletIndex}`}>
-                      <span className="bullet-line">"{item.line}"</span>
-                      {item.needsVerb && <span>Start with a strong action verb.</span>}
-                      {item.needsNumber && <span>Add measurable impact (numbers).</span>}
-                    </li>
-                  ))}
+                  {splitBullets(entry.highlights)
+                    .map((line) => ({ line, needsVerb: !startsWithActionVerb(line), needsNumber: !hasNumericIndicator(line) }))
+                    .filter((item) => item.needsVerb || item.needsNumber)
+                    .map((item, bulletIndex) => (
+                      <li key={`${index}-exp-${bulletIndex}`}>
+                        <span className="bullet-line">"{item.line}"</span>
+                        {item.needsVerb && <span>Start with a strong action verb.</span>}
+                        {item.needsNumber && <span>Add measurable impact (numbers).</span>}
+                      </li>
+                    ))}
                 </ul>
               )}
             </div>
@@ -398,76 +494,172 @@ export default function BuilderPage() {
             Add Experience
           </button>
 
-          <h2>Projects</h2>
-          {data.projects.map((entry, index) => (
-            <div key={`proj-${index}`} className="stack-row">
-              <input
-                placeholder="Project Name"
-                value={entry.name}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    projects: updateListItem(data.projects, index, { ...entry, name: e.target.value })
-                  })
+          <div className="section-head section-inline-head">
+            <h2>Skills</h2>
+            <button
+              type="button"
+              onClick={() => {
+                if (skillSuggestLoading) {
+                  return;
                 }
-              />
-              <textarea
-                placeholder="Project Description"
-                value={entry.description}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    projects: updateListItem(data.projects, index, { ...entry, description: e.target.value })
-                  })
-                }
-              />
-              <textarea
-                placeholder="Highlights (one bullet per line)"
-                value={entry.highlights}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    projects: updateListItem(data.projects, index, { ...entry, highlights: e.target.value })
-                  })
-                }
-              />
-              <div className="entry-actions">
-                <button type="button" className="danger-button" onClick={() => deleteProjectEntry(index)}>
-                  Delete Entry
-                </button>
+                setSkillSuggestLoading(true);
+                window.setTimeout(() => {
+                  setData((prev) => ({
+                    ...prev,
+                    skillsByCategory: {
+                      technical: ['TypeScript', 'React', 'Node.js', 'PostgreSQL', 'GraphQL'].reduce(
+                        (acc, skill) => uniquePush(acc, skill),
+                        prev.skillsByCategory.technical
+                      ),
+                      soft: ['Team Leadership', 'Problem Solving'].reduce(
+                        (acc, skill) => uniquePush(acc, skill),
+                        prev.skillsByCategory.soft
+                      ),
+                      tools: ['Git', 'Docker', 'AWS'].reduce(
+                        (acc, skill) => uniquePush(acc, skill),
+                        prev.skillsByCategory.tools
+                      )
+                    }
+                  }));
+                  setSkillSuggestLoading(false);
+                }, 1000);
+              }}
+            >
+              {skillSuggestLoading ? 'Suggesting...' : '✨ Suggest Skills'}
+            </button>
+          </div>
+
+          {CATEGORY_META.map((meta) => (
+            <div key={meta.key} className="skill-category-block">
+              <h3>{meta.label} ({data.skillsByCategory[meta.key].length})</h3>
+              <div className="chip-row">
+                {data.skillsByCategory[meta.key].map((skill) => (
+                  <span key={`${meta.key}-${skill}`} className="chip">
+                    {skill}
+                    <button type="button" className="chip-remove" onClick={() => removeSkill(meta.key, skill)}>
+                      X
+                    </button>
+                  </span>
+                ))}
               </div>
-              {getBulletGuidance(entry.highlights).length > 0 && (
-                <ul className="bullet-guidance">
-                  {getBulletGuidance(entry.highlights).map((item, bulletIndex) => (
-                    <li key={`${index}-proj-${bulletIndex}`}>
-                      <span className="bullet-line">"{item.line}"</span>
-                      {item.needsVerb && <span>Start with a strong action verb.</span>}
-                      {item.needsNumber && <span>Add measurable impact (numbers).</span>}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <input
+                placeholder={`Add ${meta.label}`}
+                value={skillDrafts[meta.key]}
+                onChange={(e) => setSkillDrafts({ ...skillDrafts, [meta.key]: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addSkill(meta.key, skillDrafts[meta.key]);
+                  }
+                }}
+              />
             </div>
           ))}
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() =>
-              setData({
-                ...data,
-                projects: [...data.projects, { name: '', description: '', highlights: '' }]
-              })
-            }
-          >
-            Add Project
-          </button>
 
-          <h2>Skills</h2>
-          <input
-            placeholder="Comma-separated skills"
-            value={data.skills}
-            onChange={(e) => setData({ ...data, skills: e.target.value })}
-          />
+          <div className="section-head section-inline-head">
+            <h2>Projects</h2>
+            <button type="button" onClick={addProjectEntry}>Add Project</button>
+          </div>
+
+          {data.projects.map((entry, index) => {
+            const isOpen = openProjects.includes(index);
+            const guidance = projectGuidance(entry.description);
+            return (
+              <article key={`proj-${index}`} className="project-accordion-item">
+                <button type="button" className="project-accordion-header" onClick={() => toggleProject(index)}>
+                  <span>{entry.title.trim().length > 0 ? entry.title.trim() : `Project ${index + 1}`}</span>
+                  <span>{isOpen ? 'Hide' : 'Show'}</span>
+                </button>
+
+                {isOpen && (
+                  <div className="project-accordion-body">
+                    <input
+                      placeholder="Project Title"
+                      value={entry.title}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          projects: updateListItem(data.projects, index, { ...entry, title: e.target.value })
+                        })
+                      }
+                    />
+
+                    <textarea
+                      placeholder="Description"
+                      maxLength={200}
+                      value={entry.description}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          projects: updateListItem(data.projects, index, {
+                            ...entry,
+                            description: e.target.value.slice(0, 200)
+                          })
+                        })
+                      }
+                    />
+                    <div className="counter-row">{entry.description.length}/200</div>
+
+                    {guidance && (
+                      <ul className="bullet-guidance">
+                        {guidance.needsVerb && <li>Start with a strong action verb.</li>}
+                        {guidance.needsNumber && <li>Add measurable impact (numbers).</li>}
+                      </ul>
+                    )}
+
+                    <div className="chip-row">
+                      {entry.techStack.map((tech) => (
+                        <span key={`${index}-${tech}`} className="chip">
+                          {tech}
+                          <button type="button" className="chip-remove" onClick={() => removeProjectTech(index, tech)}>
+                            X
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <input
+                      placeholder="Tech Stack (press Enter)"
+                      value={projectTechDrafts[index] ?? ''}
+                      onChange={(e) => setProjectTechDrafts({ ...projectTechDrafts, [index]: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addProjectTech(index, projectTechDrafts[index] ?? '');
+                        }
+                      }}
+                    />
+
+                    <input
+                      placeholder="Live URL (optional)"
+                      value={entry.liveUrl}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          projects: updateListItem(data.projects, index, { ...entry, liveUrl: e.target.value })
+                        })
+                      }
+                    />
+                    <input
+                      placeholder="GitHub URL (optional)"
+                      value={entry.githubUrl}
+                      onChange={(e) =>
+                        setData({
+                          ...data,
+                          projects: updateListItem(data.projects, index, { ...entry, githubUrl: e.target.value })
+                        })
+                      }
+                    />
+
+                    <div className="entry-actions">
+                      <button type="button" className="danger-button" onClick={() => deleteProjectEntry(index)}>
+                        Delete Entry
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
 
           <h2>Links</h2>
           <div className="form-grid-two">
@@ -545,26 +737,41 @@ export default function BuilderPage() {
                 {visibleProjects.length > 0 && (
                   <section>
                     <h4>Projects</h4>
-                    {visibleProjects.map((entry, index) => (
-                      <div key={`prev-proj-${index}`} className="preview-entry">
-                        {entry.name.trim().length > 0 && <p>{entry.name.trim()}</p>}
-                        {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
-                        {splitBullets(entry.highlights).length > 0 && (
-                          <ul>
-                            {splitBullets(entry.highlights).map((line) => (
-                              <li key={`${line}-${index}`}>{line}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
+                    <div className="project-card-list">
+                      {visibleProjects.map((entry, index) => (
+                        <article key={`prev-proj-${index}`} className="project-card">
+                          {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
+                          {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
+                          {entry.techStack.length > 0 && (
+                            <div className="chip-row">
+                              {entry.techStack.map((tech) => (
+                                <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="project-links">
+                            {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
+                            {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
                   </section>
                 )}
 
                 {skillsList.length > 0 && (
                   <section>
                     <h4>Skills</h4>
-                    <p>{skillsList.join(', ')}</p>
+                    {CATEGORY_META.map((meta) => (
+                      <div key={`preview-${meta.key}`} className="skill-preview-group">
+                        {data.skillsByCategory[meta.key].length > 0 && <p>{meta.label}</p>}
+                        <div className="chip-row">
+                          {data.skillsByCategory[meta.key].map((skill) => (
+                            <span key={`preview-${meta.key}-${skill}`} className="chip chip-static">{skill}</span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </section>
                 )}
 

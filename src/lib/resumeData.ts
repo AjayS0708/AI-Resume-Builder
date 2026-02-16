@@ -19,9 +19,18 @@ export type ExperienceEntry = {
 };
 
 export type ProjectEntry = {
-  name: string;
+  title: string;
   description: string;
+  techStack: string[];
+  liveUrl: string;
+  githubUrl: string;
   highlights: string;
+};
+
+export type SkillsByCategory = {
+  technical: string[];
+  soft: string[];
+  tools: string[];
 };
 
 export type ResumeBuilderData = {
@@ -30,6 +39,7 @@ export type ResumeBuilderData = {
   education: EducationEntry[];
   experience: ExperienceEntry[];
   projects: ProjectEntry[];
+  skillsByCategory: SkillsByCategory;
   skills: string;
   github: string;
   linkedin: string;
@@ -52,11 +62,19 @@ export const createEmptyResumeData = (): ResumeBuilderData => ({
   summary: '',
   education: [{ school: '', degree: '', year: '' }],
   experience: [{ company: '', role: '', duration: '', highlights: '' }],
-  projects: [{ name: '', description: '', highlights: '' }],
+  projects: [{ title: '', description: '', techStack: [], liveUrl: '', githubUrl: '', highlights: '' }],
+  skillsByCategory: { technical: [], soft: [], tools: [] },
   skills: '',
   github: '',
   linkedin: ''
 });
+
+const normalizeStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+};
 
 const normalizeEducation = (raw: unknown): EducationEntry[] => {
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -83,13 +101,50 @@ const normalizeExperience = (raw: unknown): ExperienceEntry[] => {
 
 const normalizeProjects = (raw: unknown): ProjectEntry[] => {
   if (!Array.isArray(raw) || raw.length === 0) {
-    return [{ name: '', description: '', highlights: '' }];
+    return [{ title: '', description: '', techStack: [], liveUrl: '', githubUrl: '', highlights: '' }];
   }
-  return raw.map((item) => ({
-    name: typeof item === 'object' && item !== null && 'name' in item ? String((item as { name?: unknown }).name ?? '') : '',
-    description: typeof item === 'object' && item !== null && 'description' in item ? String((item as { description?: unknown }).description ?? '') : '',
-    highlights: typeof item === 'object' && item !== null && 'highlights' in item ? String((item as { highlights?: unknown }).highlights ?? '') : ''
-  }));
+  return raw.map((item) => {
+    const legacy = (typeof item === 'object' && item !== null ? item : {}) as {
+      title?: unknown;
+      name?: unknown;
+      description?: unknown;
+      techStack?: unknown;
+      liveUrl?: unknown;
+      githubUrl?: unknown;
+      highlights?: unknown;
+    };
+
+    return {
+      title: String(legacy.title ?? legacy.name ?? ''),
+      description: String(legacy.description ?? ''),
+      techStack: normalizeStringArray(legacy.techStack),
+      liveUrl: String(legacy.liveUrl ?? ''),
+      githubUrl: String(legacy.githubUrl ?? ''),
+      highlights: String(legacy.highlights ?? '')
+    };
+  });
+};
+
+const normalizeSkillsByCategory = (raw: unknown, fallbackSkills: string): SkillsByCategory => {
+  const parsed = (typeof raw === 'object' && raw !== null ? raw : {}) as {
+    technical?: unknown;
+    soft?: unknown;
+    tools?: unknown;
+  };
+
+  const technical = normalizeStringArray(parsed.technical);
+  const soft = normalizeStringArray(parsed.soft);
+  const tools = normalizeStringArray(parsed.tools);
+
+  if (technical.length === 0 && soft.length === 0 && tools.length === 0) {
+    return {
+      technical: fallbackSkills.split(',').map((item) => item.trim()).filter(Boolean),
+      soft: [],
+      tools: []
+    };
+  }
+
+  return { technical, soft, tools };
 };
 
 export const normalizeResumeData = (input: unknown): ResumeBuilderData => {
@@ -98,6 +153,7 @@ export const normalizeResumeData = (input: unknown): ResumeBuilderData => {
   }
 
   const raw = input as Partial<ResumeBuilderData>;
+  const legacySkills = String(raw.skills ?? '');
 
   return {
     personal: {
@@ -110,7 +166,8 @@ export const normalizeResumeData = (input: unknown): ResumeBuilderData => {
     education: normalizeEducation(raw.education),
     experience: normalizeExperience(raw.experience),
     projects: normalizeProjects(raw.projects),
-    skills: String(raw.skills ?? ''),
+    skillsByCategory: normalizeSkillsByCategory(raw.skillsByCategory, legacySkills),
+    skills: legacySkills,
     github: String(raw.github ?? ''),
     linkedin: String(raw.linkedin ?? '')
   };
@@ -148,14 +205,22 @@ export const saveResumeTemplate = (template: ResumeTemplate): void => {
   localStorage.setItem(RESUME_TEMPLATE_KEY, template);
 };
 
-export const splitSkills = (skills: string): string[] =>
-  skills.split(',').map((item) => item.trim()).filter(Boolean);
-
 export const splitBullets = (text: string): string[] =>
   text
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
+
+export const getAllSkills = (data: ResumeBuilderData): string[] => {
+  const categorySkills = [
+    ...data.skillsByCategory.technical,
+    ...data.skillsByCategory.soft,
+    ...data.skillsByCategory.tools
+  ];
+  const legacySkills = data.skills.split(',').map((item) => item.trim()).filter(Boolean);
+  const combined = [...categorySkills, ...legacySkills];
+  return Array.from(new Set(combined.map((item) => item.trim()).filter(Boolean)));
+};
 
 const countWords = (text: string): number =>
   text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
@@ -164,7 +229,8 @@ const hasMeaningfulExperience = (entry: ExperienceEntry): boolean =>
   [entry.company, entry.role, entry.duration, entry.highlights].some((value) => value.trim().length > 0);
 
 const hasMeaningfulProject = (entry: ProjectEntry): boolean =>
-  [entry.name, entry.description, entry.highlights].some((value) => value.trim().length > 0);
+  [entry.title, entry.description, entry.liveUrl, entry.githubUrl, entry.highlights]
+    .some((value) => value.trim().length > 0) || entry.techStack.length > 0;
 
 const hasCompleteEducation = (entry: EducationEntry): boolean =>
   entry.school.trim().length > 0 && entry.degree.trim().length > 0 && entry.year.trim().length > 0;
@@ -194,14 +260,15 @@ export const computeAtsV1 = (data: ResumeBuilderData): AtsResult => {
   const summaryWords = countWords(data.summary);
   const projectEntries = data.projects.filter(hasMeaningfulProject);
   const experienceEntries = data.experience.filter(hasMeaningfulExperience);
-  const skillsItems = splitSkills(data.skills);
+  const skillsItems = getAllSkills(data);
   const hasLink = data.github.trim().length > 0 || data.linkedin.trim().length > 0;
   const completeEducation = data.education.some(hasCompleteEducation);
 
   const impactLines = [
     ...experienceEntries.flatMap((entry) => splitBullets(entry.highlights)),
+    ...projectEntries.map((entry) => entry.description.trim()),
     ...projectEntries.flatMap((entry) => splitBullets(entry.highlights))
-  ];
+  ].filter(Boolean);
   const hasImpactNumbers = impactLines.some(containsNumericImpact);
 
   let score = 0;
@@ -258,7 +325,7 @@ export const hasAnyPreviewContent = (data: ResumeBuilderData): boolean => {
   const hasEducation = data.education.some((entry) => [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0));
   const hasExperience = data.experience.some(hasMeaningfulExperience);
   const hasProjects = data.projects.some(hasMeaningfulProject);
-  const hasSkills = splitSkills(data.skills).length > 0;
+  const hasSkills = getAllSkills(data).length > 0;
   const hasLinks = data.github.trim().length > 0 || data.linkedin.trim().length > 0;
 
   return hasPersonal || hasSummary || hasEducation || hasExperience || hasProjects || hasSkills || hasLinks;
@@ -268,11 +335,12 @@ export const computeTopImprovements = (data: ResumeBuilderData): string[] => {
   const summaryWords = countWords(data.summary);
   const projectEntries = data.projects.filter(hasMeaningfulProject);
   const experienceEntries = data.experience.filter(hasMeaningfulExperience);
-  const skillsItems = splitSkills(data.skills);
+  const skillsItems = getAllSkills(data);
   const impactLines = [
     ...experienceEntries.flatMap((entry) => splitBullets(entry.highlights)),
+    ...projectEntries.map((entry) => entry.description.trim()),
     ...projectEntries.flatMap((entry) => splitBullets(entry.highlights))
-  ];
+  ].filter(Boolean);
   const hasImpactNumbers = impactLines.some(containsNumericImpact);
 
   const items: string[] = [];

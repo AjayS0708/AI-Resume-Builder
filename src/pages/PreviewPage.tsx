@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   createEmptyResumeData,
+  getAllSkills,
   hasAnyPreviewContent,
   loadResumeData,
   loadResumeTemplate,
   RESUME_TEMPLATES,
   saveResumeTemplate,
   splitBullets,
-  splitSkills,
   type ResumeBuilderData,
   type ResumeTemplate
 } from '../lib/resumeData';
@@ -19,7 +19,7 @@ const isExperienceVisible = (entry: ResumeBuilderData['experience'][number]): bo
   [entry.company, entry.role, entry.duration, entry.highlights].some((value) => value.trim().length > 0);
 
 const isProjectVisible = (entry: ResumeBuilderData['projects'][number]): boolean =>
-  [entry.name, entry.description, entry.highlights].some((value) => value.trim().length > 0);
+  [entry.title, entry.description, entry.liveUrl, entry.githubUrl, entry.highlights].some((value) => value.trim().length > 0) || entry.techStack.length > 0;
 
 export default function PreviewPage() {
   const [data] = useState<ResumeBuilderData>(() => {
@@ -41,7 +41,7 @@ export default function PreviewPage() {
     saveResumeTemplate(next);
   };
 
-  const skills = useMemo(() => splitSkills(data.skills), [data.skills]);
+  const skills = useMemo(() => getAllSkills(data), [data]);
   const education = useMemo(() => data.education.filter(isEducationVisible), [data.education]);
   const experience = useMemo(() => data.experience.filter(isExperienceVisible), [data.experience]);
   const projects = useMemo(() => data.projects.filter(isProjectVisible), [data.projects]);
@@ -119,13 +119,21 @@ export default function PreviewPage() {
               if (projects.length > 0) {
                 lines.push('', 'Projects');
                 projects.forEach((entry) => {
-                  if (entry.name.trim().length > 0) {
-                    lines.push(entry.name.trim());
+                  if (entry.title.trim().length > 0) {
+                    lines.push(entry.title.trim());
                   }
                   if (entry.description.trim().length > 0) {
                     lines.push(entry.description.trim());
                   }
-                  splitBullets(entry.highlights).forEach((line) => lines.push(`- ${line}`));
+                  if (entry.techStack.length > 0) {
+                    lines.push(`Tech Stack: ${entry.techStack.join(', ')}`);
+                  }
+                  if (entry.liveUrl.trim().length > 0) {
+                    lines.push(`Live URL: ${entry.liveUrl.trim()}`);
+                  }
+                  if (entry.githubUrl.trim().length > 0) {
+                    lines.push(`GitHub URL: ${entry.githubUrl.trim()}`);
+                  }
                 });
               }
               if (skills.length > 0) {
@@ -210,26 +218,55 @@ export default function PreviewPage() {
               {projects.length > 0 && (
                 <section>
                   <h2>Projects</h2>
-                  {projects.map((entry, index) => (
-                    <div key={`preview-proj-${index}`} className="preview-entry">
-                      {entry.name.trim().length > 0 && <p>{entry.name.trim()}</p>}
-                      {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
-                      {splitBullets(entry.highlights).length > 0 && (
-                        <ul>
-                          {splitBullets(entry.highlights).map((line) => (
-                            <li key={`${line}-${index}`}>{line}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
+                  <div className="project-card-list">
+                    {projects.map((entry, index) => (
+                      <article key={`preview-proj-${index}`} className="project-card">
+                        {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
+                        {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
+                        {entry.techStack.length > 0 && (
+                          <div className="chip-row">
+                            {entry.techStack.map((tech) => (
+                              <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="project-links">
+                          {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
+                          {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
                 </section>
               )}
 
               {skills.length > 0 && (
                 <section>
                   <h2>Skills</h2>
-                  <p>{skills.join(', ')}</p>
+                  <div className="skill-preview-group">
+                    {data.skillsByCategory.technical.length > 0 && <p>Technical Skills</p>}
+                    <div className="chip-row">
+                      {data.skillsByCategory.technical.map((skill) => (
+                        <span key={`preview-technical-${skill}`} className="chip chip-static">{skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="skill-preview-group">
+                    {data.skillsByCategory.soft.length > 0 && <p>Soft Skills</p>}
+                    <div className="chip-row">
+                      {data.skillsByCategory.soft.map((skill) => (
+                        <span key={`preview-soft-${skill}`} className="chip chip-static">{skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="skill-preview-group">
+                    {data.skillsByCategory.tools.length > 0 && <p>Tools & Technologies</p>}
+                    <div className="chip-row">
+                      {data.skillsByCategory.tools.map((skill) => (
+                        <span key={`preview-tools-${skill}`} className="chip chip-static">{skill}</span>
+                      ))}
+                    </div>
+                  </div>
                 </section>
               )}
 
