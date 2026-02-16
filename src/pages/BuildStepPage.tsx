@@ -42,7 +42,7 @@ export default function BuildStepPage({ step }: Props) {
 
   const promptText = useMemo(() => {
     return [
-      `Project: AI Resume Builder - Build Track`,
+      `Project: AI Resume Builder — Build Track`,
       `Step ${step.index} of 8: ${step.title}`,
       step.prompt,
       'Output exactly one clear artifact for this step.'
@@ -76,7 +76,7 @@ export default function BuildStepPage({ step }: Props) {
     <div className="page-shell">
       <header className="top-bar">
         <div className="top-left">AI Resume Builder</div>
-        <div className="top-center">Project 3 - Step {step.index} of 8</div>
+        <div className="top-center">Project 3 — Step {step.index} of 8</div>
         <div className={`status-badge ${status.toLowerCase().replace(' ', '-')}`}>{status}</div>
       </header>
 

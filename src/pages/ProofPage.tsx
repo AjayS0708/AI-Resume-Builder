@@ -28,7 +28,7 @@ export default function ProofPage() {
 
   const onCopyFinalSubmission = async () => {
     const lines = [
-      'AI Resume Builder - Build Track (Project 3)',
+      'AI Resume Builder — Build Track (Project 3)',
       ...statusRows.map((row) => `Step ${row.step}: ${row.complete ? 'Complete' : 'Pending'} (${row.route})`),
       `Lovable Link: ${lovableLink || 'N/A'}`,
       `GitHub Link: ${githubLink || 'N/A'}`,
@@ -44,7 +44,7 @@ export default function ProofPage() {
     <div className="page-shell">
       <header className="top-bar">
         <div className="top-left">AI Resume Builder</div>
-        <div className="top-center">Project 3 - Step 8 of 8</div>
+        <div className="top-center">Project 3 — Step 8 of 8</div>
         <div className="status-badge complete">Complete</div>
       </header>
 
