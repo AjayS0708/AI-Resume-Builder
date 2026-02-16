@@ -1,17 +1,35 @@
-import { useMemo, useState } from 'react';
+import { CSSProperties, useMemo, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import {
   createEmptyResumeData,
   getAllSkills,
   hasAnyPreviewContent,
+  loadResumeAccent,
   loadResumeData,
   loadResumeTemplate,
+  RESUME_ACCENTS,
   RESUME_TEMPLATES,
+  saveResumeAccent,
   saveResumeTemplate,
-  splitDescriptionPoints,
   splitBullets,
+  splitDescriptionPoints,
+  type ResumeAccentKey,
   type ResumeBuilderData,
   type ResumeTemplate
 } from '../lib/resumeData';
+
+const TEMPLATE_LABELS: Record<ResumeTemplate, string> = {
+  classic: 'Classic',
+  modern: 'Modern',
+  minimal: 'Minimal'
+};
+
+const CATEGORY_META = [
+  { key: 'technical', label: 'Technical Skills' },
+  { key: 'soft', label: 'Soft Skills' },
+  { key: 'tools', label: 'Tools & Technologies' }
+] as const;
 
 const isEducationVisible = (entry: ResumeBuilderData['education'][number]): boolean =>
   [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0);
@@ -22,7 +40,12 @@ const isExperienceVisible = (entry: ResumeBuilderData['experience'][number]): bo
 const isProjectVisible = (entry: ResumeBuilderData['projects'][number]): boolean =>
   [entry.title, entry.description, entry.liveUrl, entry.githubUrl, entry.highlights].some((value) => value.trim().length > 0) || entry.techStack.length > 0;
 
+const getTemplateStyle = (accentHsl: string): CSSProperties => ({
+  ['--resume-accent' as string]: accentHsl
+});
+
 export default function PreviewPage() {
+  const resumeRef = useRef<HTMLElement | null>(null);
   const [data] = useState<ResumeBuilderData>(() => {
     if (typeof window === 'undefined') {
       return createEmptyResumeData();
@@ -37,11 +60,24 @@ export default function PreviewPage() {
     return loadResumeTemplate();
   });
 
+  const [accent, setAccent] = useState<ResumeAccentKey>(() => {
+    if (typeof window === 'undefined') {
+      return 'teal';
+    }
+    return loadResumeAccent();
+  });
+
   const updateTemplate = (next: ResumeTemplate) => {
     setTemplate(next);
     saveResumeTemplate(next);
   };
 
+  const updateAccent = (next: ResumeAccentKey) => {
+    setAccent(next);
+    saveResumeAccent(next);
+  };
+
+  const accentTheme = RESUME_ACCENTS.find((item) => item.key === accent) ?? RESUME_ACCENTS[0];
   const skills = useMemo(() => getAllSkills(data), [data]);
   const education = useMemo(() => data.education.filter(isEducationVisible), [data.education]);
   const experience = useMemo(() => data.experience.filter(isExperienceVisible), [data.experience]);
@@ -49,33 +85,237 @@ export default function PreviewPage() {
   const hasContent = useMemo(() => hasAnyPreviewContent(data), [data]);
   const [copyLabel, setCopyLabel] = useState<string>('Copy Resume as Text');
   const [warning, setWarning] = useState<string>('');
+  const [toast, setToast] = useState<string>('');
+
+  const renderCommonMainContent = () => (
+    <>
+      {data.summary.trim().length > 0 && (
+        <section className="resume-block">
+          <h2>Summary</h2>
+          <p>{data.summary.trim()}</p>
+        </section>
+      )}
+
+      {education.length > 0 && (
+        <section className="resume-block">
+          <h2>Education</h2>
+          {education.map((entry, index) => (
+            <p key={`preview-edu-${index}`}>
+              {[entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ')}
+              {entry.year.trim().length > 0 ? ` (${entry.year.trim()})` : ''}
+            </p>
+          ))}
+        </section>
+      )}
+
+      {experience.length > 0 && (
+        <section className="resume-block">
+          <h2>Experience</h2>
+          {experience.map((entry, index) => (
+            <div key={`preview-exp-${index}`} className="preview-entry">
+              <p>
+                {[entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ')}
+                {entry.duration.trim().length > 0 ? ` (${entry.duration.trim()})` : ''}
+              </p>
+              {splitBullets(entry.highlights).length > 0 && (
+                <ul>
+                  {splitBullets(entry.highlights).map((line) => (
+                    <li key={`${line}-${index}`}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {projects.length > 0 && (
+        <section className="resume-block">
+          <h2>Projects</h2>
+          <div className="project-card-list">
+            {projects.map((entry, index) => (
+              <article key={`preview-proj-${index}`} className="project-card">
+                {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
+                {entry.description.trim().length > 0 && (
+                  <ul>
+                    {splitDescriptionPoints(entry.description).map((point, pointIndex) => (
+                      <li key={`${entry.title}-${pointIndex}`}>{point}</li>
+                    ))}
+                  </ul>
+                )}
+                {entry.techStack.length > 0 && (
+                  <div className="chip-row">
+                    {entry.techStack.map((tech) => (
+                      <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="project-links">
+                  {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
+                  {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+
+  const renderSkillsGrouped = () => (
+    <section className="resume-block">
+      <h2>Skills</h2>
+      {CATEGORY_META.map((meta) => (
+        <div key={`preview-${meta.key}`} className="skill-preview-group">
+          {data.skillsByCategory[meta.key].length > 0 && <p>{meta.label}</p>}
+          <div className="chip-row">
+            {data.skillsByCategory[meta.key].map((skill) => (
+              <span key={`preview-${meta.key}-${skill}`} className="chip chip-static">{skill}</span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+
+  const renderClassicOrMinimal = () => (
+    <>
+      {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
+        <header className="resume-header-block">
+          {data.personal.name.trim().length > 0 && <h1>{data.personal.name.trim()}</h1>}
+          <p>
+            {[data.personal.email, data.personal.phone, data.personal.location]
+              .map((value) => value.trim())
+              .filter(Boolean)
+              .join(' | ')}
+          </p>
+        </header>
+      )}
+
+      {renderCommonMainContent()}
+
+      {skills.length > 0 && renderSkillsGrouped()}
+
+      {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
+        <section className="resume-block">
+          <h2>Links</h2>
+          {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
+          {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
+        </section>
+      )}
+    </>
+  );
+
+  const renderModern = () => (
+    <div className="modern-layout">
+      <aside className="modern-sidebar">
+        {data.personal.name.trim().length > 0 && <h1>{data.personal.name.trim()}</h1>}
+        <div className="resume-block">
+          <h2>Contact</h2>
+          {data.personal.email.trim().length > 0 && <p>{data.personal.email.trim()}</p>}
+          {data.personal.phone.trim().length > 0 && <p>{data.personal.phone.trim()}</p>}
+          {data.personal.location.trim().length > 0 && <p>{data.personal.location.trim()}</p>}
+        </div>
+        {skills.length > 0 && renderSkillsGrouped()}
+        {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
+          <div className="resume-block">
+            <h2>Links</h2>
+            {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
+            {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
+          </div>
+        )}
+      </aside>
+      <section className="modern-main">{renderCommonMainContent()}</section>
+    </div>
+  );
 
   return (
     <main className="page page-preview">
       <div className="preview-frame">
-        <div className="template-tabs" role="tablist" aria-label="Resume template">
+        <div className="visual-template-picker" aria-label="Template picker">
           {RESUME_TEMPLATES.map((item) => (
             <button
               key={item}
               type="button"
-              className={item === template ? 'template-tab active' : 'template-tab'}
+              className={item === template ? 'template-thumb active' : 'template-thumb'}
               onClick={() => updateTemplate(item)}
             >
-              {item[0].toUpperCase() + item.slice(1)}
+              <span className="template-thumb-label">{TEMPLATE_LABELS[item]}</span>
+              <span className={`template-sketch template-sketch-${item}`}>
+                <span />
+                <span />
+                <span />
+              </span>
+              {item === template && <span className="template-check">✓</span>}
             </button>
+          ))}
+        </div>
+
+        <div className="color-picker-row" aria-label="Accent color picker">
+          {RESUME_ACCENTS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={item.key === accent ? 'color-dot active' : 'color-dot'}
+              style={{ background: item.hsl }}
+              title={item.label}
+              onClick={() => updateAccent(item.key)}
+            />
           ))}
         </div>
 
         <div className="preview-toolbar">
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
               const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
               setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
-              window.print();
+
+              if (!resumeRef.current) {
+                setToast('Unable to export PDF right now. Try again.');
+                window.setTimeout(() => setToast(''), 1800);
+                return;
+              }
+
+              const canvas = await html2canvas(resumeRef.current, {
+                scale: 1.25,
+                useCORS: true,
+                backgroundColor: '#ffffff'
+              });
+
+              const imageData = canvas.toDataURL('image/jpeg', 0.78);
+              const pdf = new jsPDF({
+                orientation: 'p',
+                unit: 'mm',
+                format: 'a4',
+                compress: true
+              });
+              const pageWidth = 210;
+              const pageHeight = 297;
+              const margin = 10;
+              const usableWidth = pageWidth - margin * 2;
+              const scaledHeight = (canvas.height * usableWidth) / canvas.width;
+
+              if (scaledHeight <= pageHeight - margin * 2) {
+                pdf.addImage(imageData, 'JPEG', margin, margin, usableWidth, scaledHeight, undefined, 'MEDIUM');
+              } else {
+                const totalPages = Math.ceil(scaledHeight / (pageHeight - margin * 2));
+                for (let i = 0; i < totalPages; i += 1) {
+                  if (i > 0) {
+                    pdf.addPage();
+                  }
+                  const yOffset = -i * (pageHeight - margin * 2);
+                  pdf.addImage(imageData, 'JPEG', margin, margin + yOffset, usableWidth, scaledHeight, undefined, 'MEDIUM');
+                }
+              }
+
+              const safeName = (data.personal.name.trim() || 'resume').replace(/[^a-zA-Z0-9-_]/g, '_');
+              pdf.save(`${safeName}.pdf`);
+              setToast('PDF export ready! Check your downloads.');
+              window.setTimeout(() => setToast(''), 1800);
             }}
           >
-            Print / Save as PDF
+            Download PDF
           </button>
           <button
             type="button"
@@ -123,9 +363,7 @@ export default function PreviewPage() {
                   if (entry.title.trim().length > 0) {
                     lines.push(entry.title.trim());
                   }
-                  if (entry.description.trim().length > 0) {
-                    lines.push(entry.description.trim());
-                  }
+                  splitDescriptionPoints(entry.description).forEach((point) => lines.push(`- ${point}`));
                   if (entry.techStack.length > 0) {
                     lines.push(`Tech Stack: ${entry.techStack.join(', ')}`);
                   }
@@ -160,131 +398,15 @@ export default function PreviewPage() {
         </div>
 
         {warning.length > 0 && <p className="preview-warning">{warning}</p>}
+        {toast.length > 0 && <p className="preview-toast">{toast}</p>}
 
-        <article className={`resume-preview-sheet template-${template}`}>
+        <article
+          ref={resumeRef}
+          className={`resume-preview-sheet template-${template}`}
+          style={getTemplateStyle(accentTheme.hsl)}
+        >
           {hasContent ? (
-            <>
-              {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
-                <header>
-                  {data.personal.name.trim().length > 0 && <h1>{data.personal.name.trim()}</h1>}
-                  <p>
-                    {[data.personal.email, data.personal.phone, data.personal.location]
-                      .map((value) => value.trim())
-                      .filter(Boolean)
-                      .join(' | ')}
-                  </p>
-                </header>
-              )}
-
-              {data.summary.trim().length > 0 && (
-                <section>
-                  <h2>Summary</h2>
-                  <p>{data.summary.trim()}</p>
-                </section>
-              )}
-
-              {education.length > 0 && (
-                <section>
-                  <h2>Education</h2>
-                  {education.map((entry, index) => (
-                    <p key={`preview-edu-${index}`}>
-                      {[entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ')}
-                      {entry.year.trim().length > 0 ? ` (${entry.year.trim()})` : ''}
-                    </p>
-                  ))}
-                </section>
-              )}
-
-              {experience.length > 0 && (
-                <section>
-                  <h2>Experience</h2>
-                  {experience.map((entry, index) => (
-                    <div key={`preview-exp-${index}`} className="preview-entry">
-                      <p>
-                        {[entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ')}
-                        {entry.duration.trim().length > 0 ? ` (${entry.duration.trim()})` : ''}
-                      </p>
-                      {splitBullets(entry.highlights).length > 0 && (
-                        <ul>
-                          {splitBullets(entry.highlights).map((line) => (
-                            <li key={`${line}-${index}`}>{line}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
-                </section>
-              )}
-
-              {projects.length > 0 && (
-                <section>
-                  <h2>Projects</h2>
-                  <div className="project-card-list">
-                    {projects.map((entry, index) => (
-                      <article key={`preview-proj-${index}`} className="project-card">
-                        {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
-                        {entry.description.trim().length > 0 && (
-                          <ul>
-                            {splitDescriptionPoints(entry.description).map((point, pointIndex) => (
-                              <li key={`${entry.title}-${pointIndex}`}>{point}</li>
-                            ))}
-                          </ul>
-                        )}
-                        {entry.techStack.length > 0 && (
-                          <div className="chip-row">
-                            {entry.techStack.map((tech) => (
-                              <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
-                            ))}
-                          </div>
-                        )}
-                        <div className="project-links">
-                          {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
-                          {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {skills.length > 0 && (
-                <section>
-                  <h2>Skills</h2>
-                  <div className="skill-preview-group">
-                    {data.skillsByCategory.technical.length > 0 && <p>Technical Skills</p>}
-                    <div className="chip-row">
-                      {data.skillsByCategory.technical.map((skill) => (
-                        <span key={`preview-technical-${skill}`} className="chip chip-static">{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="skill-preview-group">
-                    {data.skillsByCategory.soft.length > 0 && <p>Soft Skills</p>}
-                    <div className="chip-row">
-                      {data.skillsByCategory.soft.map((skill) => (
-                        <span key={`preview-soft-${skill}`} className="chip chip-static">{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="skill-preview-group">
-                    {data.skillsByCategory.tools.length > 0 && <p>Tools & Technologies</p>}
-                    <div className="chip-row">
-                      {data.skillsByCategory.tools.map((skill) => (
-                        <span key={`preview-tools-${skill}`} className="chip chip-static">{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
-                <section>
-                  <h2>Links</h2>
-                  {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
-                  {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
-                </section>
-              )}
-            </>
+            template === 'modern' ? renderModern() : renderClassicOrMinimal()
           ) : (
             <p>Resume preview is empty. Add details in the builder to populate this page.</p>
           )}

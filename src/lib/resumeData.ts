@@ -52,10 +52,24 @@ export type AtsResult = {
 };
 
 export type ResumeTemplate = 'classic' | 'modern' | 'minimal';
+export type ResumeAccentKey = 'teal' | 'navy' | 'burgundy' | 'forest' | 'charcoal';
+export type ResumeAccentTheme = {
+  key: ResumeAccentKey;
+  label: string;
+  hsl: string;
+};
 
 export const RESUME_STORAGE_KEY = 'resumeBuilderData';
 export const RESUME_TEMPLATE_KEY = 'resumeTemplateChoice';
+export const RESUME_ACCENT_KEY = 'resumeAccentChoice';
 export const RESUME_TEMPLATES: ResumeTemplate[] = ['classic', 'modern', 'minimal'];
+export const RESUME_ACCENTS: ResumeAccentTheme[] = [
+  { key: 'teal', label: 'Teal', hsl: 'hsl(168, 60%, 40%)' },
+  { key: 'navy', label: 'Navy', hsl: 'hsl(220, 60%, 35%)' },
+  { key: 'burgundy', label: 'Burgundy', hsl: 'hsl(345, 60%, 35%)' },
+  { key: 'forest', label: 'Forest', hsl: 'hsl(150, 50%, 30%)' },
+  { key: 'charcoal', label: 'Charcoal', hsl: 'hsl(0, 0%, 25%)' }
+];
 
 export const createEmptyResumeData = (): ResumeBuilderData => ({
   personal: { name: '', email: '', phone: '', location: '' },
@@ -203,6 +217,21 @@ export const loadResumeTemplate = (): ResumeTemplate => {
 
 export const saveResumeTemplate = (template: ResumeTemplate): void => {
   localStorage.setItem(RESUME_TEMPLATE_KEY, template);
+};
+
+const normalizeAccent = (value: unknown): ResumeAccentKey => {
+  if (value === 'teal' || value === 'navy' || value === 'burgundy' || value === 'forest' || value === 'charcoal') {
+    return value;
+  }
+  return 'teal';
+};
+
+export const loadResumeAccent = (): ResumeAccentKey => {
+  return normalizeAccent(localStorage.getItem(RESUME_ACCENT_KEY));
+};
+
+export const saveResumeAccent = (accent: ResumeAccentKey): void => {
+  localStorage.setItem(RESUME_ACCENT_KEY, accent);
 };
 
 export const splitBullets = (text: string): string[] =>

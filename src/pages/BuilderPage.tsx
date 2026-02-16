@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import {
   computeAtsV1,
   computeTopImprovements,
@@ -6,14 +6,18 @@ import {
   getAllSkills,
   hasAnyPreviewContent,
   hasNumericIndicator,
+  loadResumeAccent,
   loadResumeData,
   loadResumeTemplate,
+  RESUME_ACCENTS,
   RESUME_TEMPLATES,
+  saveResumeAccent,
   saveResumeData,
   saveResumeTemplate,
-  splitDescriptionPoints,
   splitBullets,
+  splitDescriptionPoints,
   startsWithActionVerb,
+  type ResumeAccentKey,
   type ResumeBuilderData,
   type ResumeTemplate
 } from '../lib/resumeData';
@@ -64,6 +68,12 @@ const CATEGORY_META: Array<{ key: SkillCategoryKey; label: string }> = [
   { key: 'tools', label: 'Tools & Technologies' }
 ];
 
+const TEMPLATE_LABELS: Record<ResumeTemplate, string> = {
+  classic: 'Classic',
+  modern: 'Modern',
+  minimal: 'Minimal'
+};
+
 const updateListItem = <T,>(items: T[], index: number, next: T): T[] =>
   items.map((item, i) => (i === index ? next : item));
 
@@ -110,6 +120,10 @@ const uniquePush = (arr: string[], value: string): string[] => {
   return [...arr, normalized];
 };
 
+const getTemplateStyle = (accentHsl: string): CSSProperties => ({
+  ['--resume-accent' as string]: accentHsl
+});
+
 export default function BuilderPage() {
   const [data, setData] = useState<ResumeBuilderData>(() => {
     if (typeof window === 'undefined') {
@@ -122,6 +136,12 @@ export default function BuilderPage() {
       return 'classic';
     }
     return loadResumeTemplate();
+  });
+  const [accent, setAccent] = useState<ResumeAccentKey>(() => {
+    if (typeof window === 'undefined') {
+      return 'teal';
+    }
+    return loadResumeAccent();
   });
   const [skillDrafts, setSkillDrafts] = useState<Record<SkillCategoryKey, string>>({
     technical: '',
@@ -140,6 +160,11 @@ export default function BuilderPage() {
     saveResumeTemplate(template);
   }, [template]);
 
+  useEffect(() => {
+    saveResumeAccent(accent);
+  }, [accent]);
+
+  const accentTheme = RESUME_ACCENTS.find((item) => item.key === accent) ?? RESUME_ACCENTS[0];
   const skillsList = useMemo(() => getAllSkills(data), [data]);
   const ats = useMemo(() => computeAtsV1(data), [data]);
   const topImprovements = useMemo(() => computeTopImprovements(data), [data]);
@@ -277,6 +302,148 @@ export default function BuilderPage() {
     setOpenProjects((prev) => [...prev, nextIndex]);
   };
 
+  const renderCommonMainContent = () => (
+    <>
+      {data.summary.trim().length > 0 && (
+        <section className="resume-block">
+          <h4>Summary</h4>
+          <p>{data.summary}</p>
+        </section>
+      )}
+
+      {visibleEducation.length > 0 && (
+        <section className="resume-block">
+          <h4>Education</h4>
+          {visibleEducation.map((entry, index) => (
+            <p key={`prev-edu-${index}`}>
+              {[entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ')}
+              {entry.year.trim().length > 0 ? ` (${entry.year.trim()})` : ''}
+            </p>
+          ))}
+        </section>
+      )}
+
+      {visibleExperience.length > 0 && (
+        <section className="resume-block">
+          <h4>Experience</h4>
+          {visibleExperience.map((entry, index) => (
+            <div key={`prev-exp-${index}`} className="preview-entry">
+              <p>
+                {[entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ')}
+                {entry.duration.trim().length > 0 ? ` (${entry.duration.trim()})` : ''}
+              </p>
+              {splitBullets(entry.highlights).length > 0 && (
+                <ul>
+                  {splitBullets(entry.highlights).map((line) => (
+                    <li key={`${line}-${index}`}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {visibleProjects.length > 0 && (
+        <section className="resume-block">
+          <h4>Projects</h4>
+          <div className="project-card-list">
+            {visibleProjects.map((entry, index) => (
+              <article key={`prev-proj-${index}`} className="project-card">
+                {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
+                {entry.description.trim().length > 0 && (
+                  <ul>
+                    {splitDescriptionPoints(entry.description).map((point, pointIndex) => (
+                      <li key={`${entry.title}-${pointIndex}`}>{point}</li>
+                    ))}
+                  </ul>
+                )}
+                {entry.techStack.length > 0 && (
+                  <div className="chip-row">
+                    {entry.techStack.map((tech) => (
+                      <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="project-links">
+                  {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
+                  {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+
+  const renderSkillsGrouped = () => (
+    <section className="resume-block">
+      <h4>Skills</h4>
+      {CATEGORY_META.map((meta) => (
+        <div key={`preview-${meta.key}`} className="skill-preview-group">
+          {data.skillsByCategory[meta.key].length > 0 && <p>{meta.label}</p>}
+          <div className="chip-row">
+            {data.skillsByCategory[meta.key].map((skill) => (
+              <span key={`preview-${meta.key}-${skill}`} className="chip chip-static">{skill}</span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+
+  const renderClassicOrMinimal = () => (
+    <>
+      {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
+        <header className="resume-header-block">
+          {data.personal.name && <h3>{data.personal.name}</h3>}
+          <p>
+            {[data.personal.email, data.personal.phone, data.personal.location]
+              .map((value) => value.trim())
+              .filter(Boolean)
+              .join(' | ')}
+          </p>
+        </header>
+      )}
+
+      {renderCommonMainContent()}
+
+      {skillsList.length > 0 && renderSkillsGrouped()}
+
+      {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
+        <section className="resume-block">
+          <h4>Links</h4>
+          {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
+          {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
+        </section>
+      )}
+    </>
+  );
+
+  const renderModern = () => (
+    <div className="modern-layout">
+      <aside className="modern-sidebar">
+        {data.personal.name && <h3>{data.personal.name}</h3>}
+        <div className="resume-block">
+          <h4>Contact</h4>
+          {data.personal.email.trim().length > 0 && <p>{data.personal.email.trim()}</p>}
+          {data.personal.phone.trim().length > 0 && <p>{data.personal.phone.trim()}</p>}
+          {data.personal.location.trim().length > 0 && <p>{data.personal.location.trim()}</p>}
+        </div>
+        {skillsList.length > 0 && renderSkillsGrouped()}
+        {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
+          <div className="resume-block">
+            <h4>Links</h4>
+            {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
+            {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
+          </div>
+        )}
+      </aside>
+      <section className="modern-main">{renderCommonMainContent()}</section>
+    </div>
+  );
+
   return (
     <main className="page page-builder">
       <section className="builder-grid">
@@ -289,19 +456,6 @@ export default function BuilderPage() {
                 Clear Form
               </button>
             </div>
-          </div>
-
-          <div className="template-tabs" role="tablist" aria-label="Resume template">
-            {RESUME_TEMPLATES.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={item === template ? 'template-tab active' : 'template-tab'}
-                onClick={() => setTemplate(item)}
-              >
-                {item[0].toUpperCase() + item.slice(1)}
-              </button>
-            ))}
           </div>
 
           <section className="ats-card" aria-live="polite">
@@ -416,72 +570,71 @@ export default function BuilderPage() {
           </button>
 
           <h2>Experience</h2>
-          {data.experience.map((entry, index) => (
-            <div key={`exp-${index}`} className="stack-row">
-              <input
-                placeholder="Company"
-                value={entry.company}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    experience: updateListItem(data.experience, index, { ...entry, company: e.target.value })
-                  })
-                }
-              />
-              <input
-                placeholder="Role"
-                value={entry.role}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    experience: updateListItem(data.experience, index, { ...entry, role: e.target.value })
-                  })
-                }
-              />
-              <input
-                placeholder="Duration"
-                value={entry.duration}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    experience: updateListItem(data.experience, index, { ...entry, duration: e.target.value })
-                  })
-                }
-              />
-              <textarea
-                placeholder="Highlights (one bullet per line)"
-                value={entry.highlights}
-                onChange={(e) =>
-                  setData({
-                    ...data,
-                    experience: updateListItem(data.experience, index, { ...entry, highlights: e.target.value })
-                  })
-                }
-              />
-              <div className="entry-actions">
-                <button type="button" className="danger-button" onClick={() => deleteExperienceEntry(index)}>
-                  Delete Entry
-                </button>
-              </div>
-              {splitBullets(entry.highlights)
-                .map((line) => ({ line, needsVerb: !startsWithActionVerb(line), needsNumber: !hasNumericIndicator(line) }))
-                .filter((item) => item.needsVerb || item.needsNumber)
-                .length > 0 && (
-                <ul className="bullet-guidance">
-                  {splitBullets(entry.highlights)
-                    .map((line) => ({ line, needsVerb: !startsWithActionVerb(line), needsNumber: !hasNumericIndicator(line) }))
-                    .filter((item) => item.needsVerb || item.needsNumber)
-                    .map((item, bulletIndex) => (
+          {data.experience.map((entry, index) => {
+            const guidanceItems = splitBullets(entry.highlights)
+              .map((line) => ({ line, needsVerb: !startsWithActionVerb(line), needsNumber: !hasNumericIndicator(line) }))
+              .filter((item) => item.needsVerb || item.needsNumber);
+            return (
+              <div key={`exp-${index}`} className="stack-row">
+                <input
+                  placeholder="Company"
+                  value={entry.company}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      experience: updateListItem(data.experience, index, { ...entry, company: e.target.value })
+                    })
+                  }
+                />
+                <input
+                  placeholder="Role"
+                  value={entry.role}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      experience: updateListItem(data.experience, index, { ...entry, role: e.target.value })
+                    })
+                  }
+                />
+                <input
+                  placeholder="Duration"
+                  value={entry.duration}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      experience: updateListItem(data.experience, index, { ...entry, duration: e.target.value })
+                    })
+                  }
+                />
+                <textarea
+                  placeholder="Highlights (one bullet per line)"
+                  value={entry.highlights}
+                  onChange={(e) =>
+                    setData({
+                      ...data,
+                      experience: updateListItem(data.experience, index, { ...entry, highlights: e.target.value })
+                    })
+                  }
+                />
+                <div className="entry-actions">
+                  <button type="button" className="danger-button" onClick={() => deleteExperienceEntry(index)}>
+                    Delete Entry
+                  </button>
+                </div>
+                {guidanceItems.length > 0 && (
+                  <ul className="bullet-guidance">
+                    {guidanceItems.map((item, bulletIndex) => (
                       <li key={`${index}-exp-${bulletIndex}`}>
                         <span className="bullet-line">"{item.line}"</span>
                         {item.needsVerb && <span>Start with a strong action verb.</span>}
                         {item.needsNumber && <span>Add measurable impact (numbers).</span>}
                       </li>
                     ))}
-                </ul>
-              )}
-            </div>
-          ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
           <button
             type="button"
             className="ghost-button"
@@ -680,116 +833,41 @@ export default function BuilderPage() {
         <aside className="builder-preview-card">
           <h2>Live Preview</h2>
 
-          <div className={`resume-shell template-${template}`}>
+          <div className="visual-template-picker" aria-label="Template picker">
+            {RESUME_TEMPLATES.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={item === template ? 'template-thumb active' : 'template-thumb'}
+                onClick={() => setTemplate(item)}
+              >
+                <span className="template-thumb-label">{TEMPLATE_LABELS[item]}</span>
+                <span className={`template-sketch template-sketch-${item}`}>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                {item === template && <span className="template-check">✓</span>}
+              </button>
+            ))}
+          </div>
+
+          <div className="color-picker-row" aria-label="Accent color picker">
+            {RESUME_ACCENTS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={item.key === accent ? 'color-dot active' : 'color-dot'}
+                style={{ background: item.hsl }}
+                title={item.label}
+                onClick={() => setAccent(item.key)}
+              />
+            ))}
+          </div>
+
+          <div className={`resume-shell template-${template}`} style={getTemplateStyle(accentTheme.hsl)}>
             {previewHasContent ? (
-              <>
-                {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
-                  <section>
-                    {data.personal.name && <h3>{data.personal.name}</h3>}
-                    <p>
-                      {[data.personal.email, data.personal.phone, data.personal.location]
-                        .map((value) => value.trim())
-                        .filter(Boolean)
-                        .join(' | ')}
-                    </p>
-                  </section>
-                )}
-
-                {data.summary.trim().length > 0 && (
-                  <section>
-                    <h4>Summary</h4>
-                    <p>{data.summary}</p>
-                  </section>
-                )}
-
-                {visibleEducation.length > 0 && (
-                  <section>
-                    <h4>Education</h4>
-                    {visibleEducation.map((entry, index) => (
-                      <p key={`prev-edu-${index}`}>
-                        {[entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ')}
-                        {entry.year.trim().length > 0 ? ` (${entry.year.trim()})` : ''}
-                      </p>
-                    ))}
-                  </section>
-                )}
-
-                {visibleExperience.length > 0 && (
-                  <section>
-                    <h4>Experience</h4>
-                    {visibleExperience.map((entry, index) => (
-                      <div key={`prev-exp-${index}`} className="preview-entry">
-                        <p>
-                          {[entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ')}
-                          {entry.duration.trim().length > 0 ? ` (${entry.duration.trim()})` : ''}
-                        </p>
-                        {splitBullets(entry.highlights).length > 0 && (
-                          <ul>
-                            {splitBullets(entry.highlights).map((line) => (
-                              <li key={`${line}-${index}`}>{line}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                  </section>
-                )}
-
-                {visibleProjects.length > 0 && (
-                  <section>
-                    <h4>Projects</h4>
-                    <div className="project-card-list">
-                      {visibleProjects.map((entry, index) => (
-                        <article key={`prev-proj-${index}`} className="project-card">
-                          {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
-                          {entry.description.trim().length > 0 && (
-                            <ul>
-                              {splitDescriptionPoints(entry.description).map((point, pointIndex) => (
-                                <li key={`${entry.title}-${pointIndex}`}>{point}</li>
-                              ))}
-                            </ul>
-                          )}
-                          {entry.techStack.length > 0 && (
-                            <div className="chip-row">
-                              {entry.techStack.map((tech) => (
-                                <span key={`${entry.title}-${tech}`} className="chip chip-static">{tech}</span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="project-links">
-                            {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
-                            {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {skillsList.length > 0 && (
-                  <section>
-                    <h4>Skills</h4>
-                    {CATEGORY_META.map((meta) => (
-                      <div key={`preview-${meta.key}`} className="skill-preview-group">
-                        {data.skillsByCategory[meta.key].length > 0 && <p>{meta.label}</p>}
-                        <div className="chip-row">
-                          {data.skillsByCategory[meta.key].map((skill) => (
-                            <span key={`preview-${meta.key}-${skill}`} className="chip chip-static">{skill}</span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </section>
-                )}
-
-                {(data.github.trim().length > 0 || data.linkedin.trim().length > 0) && (
-                  <section>
-                    <h4>Links</h4>
-                    {data.github.trim().length > 0 && <p>GitHub: {data.github.trim()}</p>}
-                    {data.linkedin.trim().length > 0 && <p>LinkedIn: {data.linkedin.trim()}</p>}
-                  </section>
-                )}
-              </>
+              template === 'modern' ? renderModern() : renderClassicOrMinimal()
             ) : (
               <p>Start filling the form to generate a live preview.</p>
             )}
