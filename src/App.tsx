@@ -1,17 +1,21 @@
-﻿import { Navigate, Route, Routes } from 'react-router-dom';
-import { RB_STEPS } from './config/rbSteps';
-import BuildStepPage from './pages/BuildStepPage';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import TopNav from './components/TopNav';
+import BuilderPage from './pages/BuilderPage';
+import HomePage from './pages/HomePage';
+import PreviewPage from './pages/PreviewPage';
 import ProofPage from './pages/ProofPage';
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/rb/01-problem" replace />} />
-      {RB_STEPS.map((step) => (
-        <Route key={step.route} path={step.route} element={<BuildStepPage step={step} />} />
-      ))}
-      <Route path="/rb/proof" element={<ProofPage />} />
-      <Route path="*" element={<Navigate to="/rb/01-problem" replace />} />
-    </Routes>
+    <div className="app-shell">
+      <TopNav />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/builder" element={<BuilderPage />} />
+        <Route path="/preview" element={<PreviewPage />} />
+        <Route path="/proof" element={<ProofPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </div>
   );
 }
