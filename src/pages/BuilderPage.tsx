@@ -11,6 +11,7 @@ import {
   RESUME_TEMPLATES,
   saveResumeData,
   saveResumeTemplate,
+  splitDescriptionPoints,
   splitBullets,
   startsWithActionVerb,
   type ResumeBuilderData,
@@ -741,7 +742,13 @@ export default function BuilderPage() {
                       {visibleProjects.map((entry, index) => (
                         <article key={`prev-proj-${index}`} className="project-card">
                           {entry.title.trim().length > 0 && <h5>{entry.title.trim()}</h5>}
-                          {entry.description.trim().length > 0 && <p>{entry.description.trim()}</p>}
+                          {entry.description.trim().length > 0 && (
+                            <ul>
+                              {splitDescriptionPoints(entry.description).map((point, pointIndex) => (
+                                <li key={`${entry.title}-${pointIndex}`}>{point}</li>
+                              ))}
+                            </ul>
+                          )}
                           {entry.techStack.length > 0 && (
                             <div className="chip-row">
                               {entry.techStack.map((tech) => (

@@ -211,6 +211,14 @@ export const splitBullets = (text: string): string[] =>
     .map((line) => line.trim())
     .filter(Boolean);
 
+export const splitDescriptionPoints = (text: string): string[] => {
+  return text
+    .split('.')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => `${part}.`);
+};
+
 export const getAllSkills = (data: ResumeBuilderData): string[] => {
   const categorySkills = [
     ...data.skillsByCategory.technical,
