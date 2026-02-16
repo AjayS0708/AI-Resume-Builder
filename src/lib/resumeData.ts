@@ -41,7 +41,11 @@ export type AtsResult = {
   allCriteriaMet: boolean;
 };
 
+export type ResumeTemplate = 'classic' | 'modern' | 'minimal';
+
 export const RESUME_STORAGE_KEY = 'resumeBuilderData';
+export const RESUME_TEMPLATE_KEY = 'resumeTemplateChoice';
+export const RESUME_TEMPLATES: ResumeTemplate[] = ['classic', 'modern', 'minimal'];
 
 export const createEmptyResumeData = (): ResumeBuilderData => ({
   personal: { name: '', email: '', phone: '', location: '' },
@@ -129,6 +133,21 @@ export const saveResumeData = (data: ResumeBuilderData): void => {
   localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(data));
 };
 
+const normalizeTemplate = (value: unknown): ResumeTemplate => {
+  if (value === 'classic' || value === 'modern' || value === 'minimal') {
+    return value;
+  }
+  return 'classic';
+};
+
+export const loadResumeTemplate = (): ResumeTemplate => {
+  return normalizeTemplate(localStorage.getItem(RESUME_TEMPLATE_KEY));
+};
+
+export const saveResumeTemplate = (template: ResumeTemplate): void => {
+  localStorage.setItem(RESUME_TEMPLATE_KEY, template);
+};
+
 export const splitSkills = (skills: string): string[] =>
   skills.split(',').map((item) => item.trim()).filter(Boolean);
 
@@ -151,6 +170,25 @@ const hasCompleteEducation = (entry: EducationEntry): boolean =>
   entry.school.trim().length > 0 && entry.degree.trim().length > 0 && entry.year.trim().length > 0;
 
 const containsNumericImpact = (text: string): boolean => /(\d+\s?%|\b\d+\b|\d+[xX]|\d+\s?[kK])/.test(text);
+
+const ACTION_VERBS = [
+  'Built',
+  'Developed',
+  'Designed',
+  'Implemented',
+  'Led',
+  'Improved',
+  'Created',
+  'Optimized',
+  'Automated'
+];
+
+export const startsWithActionVerb = (line: string): boolean => {
+  const trimmed = line.trim();
+  return ACTION_VERBS.some((verb) => trimmed.startsWith(`${verb} `) || trimmed === verb);
+};
+
+export const hasNumericIndicator = (line: string): boolean => containsNumericImpact(line);
 
 export const computeAtsV1 = (data: ResumeBuilderData): AtsResult => {
   const summaryWords = countWords(data.summary);
@@ -191,7 +229,7 @@ export const computeAtsV1 = (data: ResumeBuilderData): AtsResult => {
 
   const suggestions: string[] = [];
   if (!(summaryWords >= 40 && summaryWords <= 120)) {
-    suggestions.push('Write a stronger summary (40–120 words).');
+    suggestions.push('Write a stronger summary (40-120 words).');
   }
   if (projectEntries.length < 2) {
     suggestions.push('Add at least 2 projects.');
@@ -224,4 +262,34 @@ export const hasAnyPreviewContent = (data: ResumeBuilderData): boolean => {
   const hasLinks = data.github.trim().length > 0 || data.linkedin.trim().length > 0;
 
   return hasPersonal || hasSummary || hasEducation || hasExperience || hasProjects || hasSkills || hasLinks;
+};
+
+export const computeTopImprovements = (data: ResumeBuilderData): string[] => {
+  const summaryWords = countWords(data.summary);
+  const projectEntries = data.projects.filter(hasMeaningfulProject);
+  const experienceEntries = data.experience.filter(hasMeaningfulExperience);
+  const skillsItems = splitSkills(data.skills);
+  const impactLines = [
+    ...experienceEntries.flatMap((entry) => splitBullets(entry.highlights)),
+    ...projectEntries.flatMap((entry) => splitBullets(entry.highlights))
+  ];
+  const hasImpactNumbers = impactLines.some(containsNumericImpact);
+
+  const items: string[] = [];
+  if (projectEntries.length < 2) {
+    items.push('Add at least 2 projects.');
+  }
+  if (!hasImpactNumbers) {
+    items.push('Add measurable impact (numbers) in bullets.');
+  }
+  if (summaryWords < 40) {
+    items.push('Expand summary to at least 40 words.');
+  }
+  if (skillsItems.length < 8) {
+    items.push('Add more skills (target 8+).');
+  }
+  if (experienceEntries.length === 0) {
+    items.push('Add internship or project-based experience.');
+  }
+  return items.slice(0, 3);
 };

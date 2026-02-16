@@ -170,6 +170,23 @@ textarea {
   flex-wrap: wrap;
 }
 
+.template-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.template-tab {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.template-tab.active {
+  border-color: var(--ink);
+}
+
 .ats-card {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -233,6 +250,35 @@ textarea {
 .ats-suggestions li {
   margin-bottom: var(--space-2);
   color: var(--muted);
+}
+
+.bullet-guidance {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+
+.bullet-guidance li {
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+}
+
+.bullet-line {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.entry-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.danger-button {
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
 }
 
 h1,
@@ -332,6 +378,38 @@ h4 {
 .resume-preview-sheet ul {
   margin: var(--space-2) 0 0;
   padding-left: var(--space-6);
+}
+
+.preview-frame {
+  width: min(940px, 100%);
+}
+
+.template-classic {
+  border-width: 1px;
+}
+
+.template-modern {
+  border-width: 2px;
+}
+
+.template-modern h2,
+.template-modern h4 {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 16px;
+}
+
+.template-minimal {
+  border-left: 4px solid #000000;
+  border-right: 0;
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.template-minimal h2,
+.template-minimal h4 {
+  font-size: 18px;
+  margin-bottom: var(--space-2);
 }
 
 .page-proof {

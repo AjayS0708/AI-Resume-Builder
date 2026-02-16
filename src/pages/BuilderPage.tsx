@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   computeAtsV1,
+  computeTopImprovements,
   createEmptyResumeData,
   hasAnyPreviewContent,
+  hasNumericIndicator,
   loadResumeData,
+  loadResumeTemplate,
+  RESUME_TEMPLATES,
   saveResumeData,
+  saveResumeTemplate,
   splitBullets,
   splitSkills,
-  type ResumeBuilderData
+  startsWithActionVerb,
+  type ResumeBuilderData,
+  type ResumeTemplate
 } from '../lib/resumeData';
 
 const sampleData = (): ResumeBuilderData => ({
@@ -50,6 +57,22 @@ const sampleData = (): ResumeBuilderData => ({
 const updateListItem = <T,>(items: T[], index: number, next: T): T[] =>
   items.map((item, i) => (i === index ? next : item));
 
+type BulletGuidance = {
+  line: string;
+  needsVerb: boolean;
+  needsNumber: boolean;
+};
+
+const getBulletGuidance = (text: string): BulletGuidance[] => {
+  return splitBullets(text)
+    .map((line) => ({
+      line,
+      needsVerb: !startsWithActionVerb(line),
+      needsNumber: !hasNumericIndicator(line)
+    }))
+    .filter((item) => item.needsVerb || item.needsNumber);
+};
+
 const isEducationVisible = (entry: ResumeBuilderData['education'][number]): boolean =>
   [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0);
 
@@ -76,13 +99,24 @@ export default function BuilderPage() {
     }
     return loadResumeData();
   });
+  const [template, setTemplate] = useState<ResumeTemplate>(() => {
+    if (typeof window === 'undefined') {
+      return 'classic';
+    }
+    return loadResumeTemplate();
+  });
 
   useEffect(() => {
     saveResumeData(data);
   }, [data]);
 
+  useEffect(() => {
+    saveResumeTemplate(template);
+  }, [template]);
+
   const skillsList = useMemo(() => splitSkills(data.skills), [data.skills]);
   const ats = useMemo(() => computeAtsV1(data), [data]);
+  const topImprovements = useMemo(() => computeTopImprovements(data), [data]);
   const previewHasContent = useMemo(() => hasAnyPreviewContent(data), [data]);
 
   const visibleEducation = useMemo(
@@ -98,6 +132,60 @@ export default function BuilderPage() {
     [data.projects]
   );
 
+  const clearEducationEntry = (index: number) => {
+    setData({
+      ...data,
+      education: updateListItem(data.education, index, { school: '', degree: '', year: '' })
+    });
+  };
+
+  const deleteEducationEntry = (index: number) => {
+    if (data.education.length === 1) {
+      clearEducationEntry(index);
+      return;
+    }
+    setData({
+      ...data,
+      education: data.education.filter((_, i) => i !== index)
+    });
+  };
+
+  const clearExperienceEntry = (index: number) => {
+    setData({
+      ...data,
+      experience: updateListItem(data.experience, index, { company: '', role: '', duration: '', highlights: '' })
+    });
+  };
+
+  const deleteExperienceEntry = (index: number) => {
+    if (data.experience.length === 1) {
+      clearExperienceEntry(index);
+      return;
+    }
+    setData({
+      ...data,
+      experience: data.experience.filter((_, i) => i !== index)
+    });
+  };
+
+  const clearProjectEntry = (index: number) => {
+    setData({
+      ...data,
+      projects: updateListItem(data.projects, index, { name: '', description: '', highlights: '' })
+    });
+  };
+
+  const deleteProjectEntry = (index: number) => {
+    if (data.projects.length === 1) {
+      clearProjectEntry(index);
+      return;
+    }
+    setData({
+      ...data,
+      projects: data.projects.filter((_, i) => i !== index)
+    });
+  };
+
   return (
     <main className="page page-builder">
       <section className="builder-grid">
@@ -112,6 +200,19 @@ export default function BuilderPage() {
             </div>
           </div>
 
+          <div className="template-tabs" role="tablist" aria-label="Resume template">
+            {RESUME_TEMPLATES.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={item === template ? 'template-tab active' : 'template-tab'}
+                onClick={() => setTemplate(item)}
+              >
+                {item[0].toUpperCase() + item.slice(1)}
+              </button>
+            ))}
+          </div>
+
           <section className="ats-card" aria-live="polite">
             <div className="ats-head">
               <h2>ATS Readiness Score</h2>
@@ -120,6 +221,7 @@ export default function BuilderPage() {
             <div className="ats-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={ats.score}>
               <div className={`ats-fill ${scoreTone(ats.score)}`} style={{ width: `${ats.score}%` }} />
             </div>
+
             <h3 className="ats-subtitle">Suggestions</h3>
             {ats.suggestions.length > 0 ? (
               <ul className="ats-suggestions">
@@ -129,6 +231,17 @@ export default function BuilderPage() {
               </ul>
             ) : (
               <p className="ats-good">Strong baseline. No immediate ATS gaps detected.</p>
+            )}
+
+            <h3 className="ats-subtitle">Top 3 Improvements</h3>
+            {topImprovements.length > 0 ? (
+              <ul className="ats-suggestions">
+                {topImprovements.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ats-good">No priority improvements right now.</p>
             )}
           </section>
 
@@ -196,6 +309,11 @@ export default function BuilderPage() {
                   })
                 }
               />
+              <div className="entry-actions">
+                <button type="button" className="danger-button" onClick={() => deleteEducationEntry(index)}>
+                  Delete Entry
+                </button>
+              </div>
             </div>
           ))}
           <button
@@ -249,6 +367,22 @@ export default function BuilderPage() {
                   })
                 }
               />
+              <div className="entry-actions">
+                <button type="button" className="danger-button" onClick={() => deleteExperienceEntry(index)}>
+                  Delete Entry
+                </button>
+              </div>
+              {getBulletGuidance(entry.highlights).length > 0 && (
+                <ul className="bullet-guidance">
+                  {getBulletGuidance(entry.highlights).map((item, bulletIndex) => (
+                    <li key={`${index}-exp-${bulletIndex}`}>
+                      <span className="bullet-line">"{item.line}"</span>
+                      {item.needsVerb && <span>Start with a strong action verb.</span>}
+                      {item.needsNumber && <span>Add measurable impact (numbers).</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
           <button
@@ -297,6 +431,22 @@ export default function BuilderPage() {
                   })
                 }
               />
+              <div className="entry-actions">
+                <button type="button" className="danger-button" onClick={() => deleteProjectEntry(index)}>
+                  Delete Entry
+                </button>
+              </div>
+              {getBulletGuidance(entry.highlights).length > 0 && (
+                <ul className="bullet-guidance">
+                  {getBulletGuidance(entry.highlights).map((item, bulletIndex) => (
+                    <li key={`${index}-proj-${bulletIndex}`}>
+                      <span className="bullet-line">"{item.line}"</span>
+                      {item.needsVerb && <span>Start with a strong action verb.</span>}
+                      {item.needsNumber && <span>Add measurable impact (numbers).</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
           <button
@@ -337,7 +487,7 @@ export default function BuilderPage() {
         <aside className="builder-preview-card">
           <h2>Live Preview</h2>
 
-          <div className="resume-shell">
+          <div className={`resume-shell template-${template}`}>
             {previewHasContent ? (
               <>
                 {(data.personal.name || data.personal.email || data.personal.phone || data.personal.location) && (
