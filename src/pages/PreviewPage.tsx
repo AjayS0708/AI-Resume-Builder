@@ -1,4 +1,4 @@
-import { CSSProperties, useMemo, useRef, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
@@ -47,7 +47,7 @@ const getTemplateStyle = (accentHsl: string): CSSProperties => ({
 
 export default function PreviewPage() {
   const resumeRef = useRef<HTMLElement | null>(null);
-  const [data] = useState<ResumeBuilderData>(() => {
+  const [data, setData] = useState<ResumeBuilderData>(() => {
     if (typeof window === 'undefined') {
       return createEmptyResumeData();
     }
@@ -88,6 +88,47 @@ export default function PreviewPage() {
   const [copyLabel, setCopyLabel] = useState<string>('Copy Resume as Text');
   const [warning, setWarning] = useState<string>('');
   const [toast, setToast] = useState<string>('');
+
+  useEffect(() => {
+    const refreshFromStorage = () => {
+      setData(loadResumeData());
+      setTemplate(loadResumeTemplate());
+      setAccent(loadResumeAccent());
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFromStorage();
+      }
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === null ||
+        event.key === 'resumeBuilderData' ||
+        event.key === 'resumeTemplateChoice' ||
+        event.key === 'resumeAccentChoice'
+      ) {
+        refreshFromStorage();
+      }
+    };
+
+    window.addEventListener('focus', refreshFromStorage);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('resume-data-updated', refreshFromStorage);
+    window.addEventListener('resume-template-updated', refreshFromStorage);
+    window.addEventListener('resume-accent-updated', refreshFromStorage);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('focus', refreshFromStorage);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('resume-data-updated', refreshFromStorage);
+      window.removeEventListener('resume-template-updated', refreshFromStorage);
+      window.removeEventListener('resume-accent-updated', refreshFromStorage);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   const scoreBand = useMemo(() => {
     if (ats.score <= 40) {
@@ -303,51 +344,56 @@ export default function PreviewPage() {
           <button
             type="button"
             onClick={async () => {
-              const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
-              setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
+              try {
+                const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
+                setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
 
-              if (!resumeRef.current) {
+                if (!resumeRef.current) {
+                  setToast('Unable to export PDF right now. Try again.');
+                  window.setTimeout(() => setToast(''), 1800);
+                  return;
+                }
+
+                const canvas = await html2canvas(resumeRef.current, {
+                  scale: 1.25,
+                  useCORS: true,
+                  backgroundColor: '#ffffff'
+                });
+
+                const imageData = canvas.toDataURL('image/jpeg', 0.78);
+                const pdf = new jsPDF({
+                  orientation: 'p',
+                  unit: 'mm',
+                  format: 'a4',
+                  compress: true
+                });
+                const pageWidth = 210;
+                const pageHeight = 297;
+                const margin = 10;
+                const usableWidth = pageWidth - margin * 2;
+                const scaledHeight = (canvas.height * usableWidth) / canvas.width;
+
+                if (scaledHeight <= pageHeight - margin * 2) {
+                  pdf.addImage(imageData, 'JPEG', margin, margin, usableWidth, scaledHeight, undefined, 'MEDIUM');
+                } else {
+                  const totalPages = Math.ceil(scaledHeight / (pageHeight - margin * 2));
+                  for (let i = 0; i < totalPages; i += 1) {
+                    if (i > 0) {
+                      pdf.addPage();
+                    }
+                    const yOffset = -i * (pageHeight - margin * 2);
+                    pdf.addImage(imageData, 'JPEG', margin, margin + yOffset, usableWidth, scaledHeight, undefined, 'MEDIUM');
+                  }
+                }
+
+                const safeName = (data.personal.name.trim() || 'resume').replace(/[^a-zA-Z0-9-_]/g, '_');
+                pdf.save(`${safeName}.pdf`);
+                setToast('PDF export ready! Check your downloads.');
+                window.setTimeout(() => setToast(''), 1800);
+              } catch {
                 setToast('Unable to export PDF right now. Try again.');
                 window.setTimeout(() => setToast(''), 1800);
-                return;
               }
-
-              const canvas = await html2canvas(resumeRef.current, {
-                scale: 1.25,
-                useCORS: true,
-                backgroundColor: '#ffffff'
-              });
-
-              const imageData = canvas.toDataURL('image/jpeg', 0.78);
-              const pdf = new jsPDF({
-                orientation: 'p',
-                unit: 'mm',
-                format: 'a4',
-                compress: true
-              });
-              const pageWidth = 210;
-              const pageHeight = 297;
-              const margin = 10;
-              const usableWidth = pageWidth - margin * 2;
-              const scaledHeight = (canvas.height * usableWidth) / canvas.width;
-
-              if (scaledHeight <= pageHeight - margin * 2) {
-                pdf.addImage(imageData, 'JPEG', margin, margin, usableWidth, scaledHeight, undefined, 'MEDIUM');
-              } else {
-                const totalPages = Math.ceil(scaledHeight / (pageHeight - margin * 2));
-                for (let i = 0; i < totalPages; i += 1) {
-                  if (i > 0) {
-                    pdf.addPage();
-                  }
-                  const yOffset = -i * (pageHeight - margin * 2);
-                  pdf.addImage(imageData, 'JPEG', margin, margin + yOffset, usableWidth, scaledHeight, undefined, 'MEDIUM');
-                }
-              }
-
-              const safeName = (data.personal.name.trim() || 'resume').replace(/[^a-zA-Z0-9-_]/g, '_');
-              pdf.save(`${safeName}.pdf`);
-              setToast('PDF export ready! Check your downloads.');
-              window.setTimeout(() => setToast(''), 1800);
             }}
           >
             Download PDF
@@ -356,76 +402,81 @@ export default function PreviewPage() {
             type="button"
             className="ghost-button"
             onClick={async () => {
-              const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
-              setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
+              try {
+                const isIncomplete = data.personal.name.trim().length === 0 || (projects.length === 0 && experience.length === 0);
+                setWarning(isIncomplete ? 'Your resume may look incomplete.' : '');
 
-              const lines: string[] = [];
-              if (data.personal.name.trim().length > 0) {
-                lines.push(data.personal.name.trim());
-              }
-
-              const contact = [data.personal.email, data.personal.phone, data.personal.location]
-                .map((value) => value.trim())
-                .filter(Boolean)
-                .join(' | ');
-              if (contact.length > 0) {
-                lines.push(`Contact: ${contact}`);
-              }
-
-              if (data.summary.trim().length > 0) {
-                lines.push('', 'Summary', data.summary.trim());
-              }
-              if (education.length > 0) {
-                lines.push('', 'Education');
-                education.forEach((entry) => {
-                  const primary = [entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ');
-                  const year = entry.year.trim();
-                  lines.push(year.length > 0 ? `${primary} (${year})` : primary);
-                });
-              }
-              if (experience.length > 0) {
-                lines.push('', 'Experience');
-                experience.forEach((entry) => {
-                  const heading = [entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ');
-                  const duration = entry.duration.trim();
-                  lines.push(duration.length > 0 ? `${heading} (${duration})` : heading);
-                  splitBullets(entry.highlights).forEach((line) => lines.push(`- ${line}`));
-                });
-              }
-              if (projects.length > 0) {
-                lines.push('', 'Projects');
-                projects.forEach((entry) => {
-                  if (entry.title.trim().length > 0) {
-                    lines.push(entry.title.trim());
-                  }
-                  splitDescriptionPoints(entry.description).forEach((point) => lines.push(`- ${point}`));
-                  if (entry.techStack.length > 0) {
-                    lines.push(`Tech Stack: ${entry.techStack.join(', ')}`);
-                  }
-                  if (entry.liveUrl.trim().length > 0) {
-                    lines.push(`Live URL: ${entry.liveUrl.trim()}`);
-                  }
-                  if (entry.githubUrl.trim().length > 0) {
-                    lines.push(`GitHub URL: ${entry.githubUrl.trim()}`);
-                  }
-                });
-              }
-              if (skills.length > 0) {
-                lines.push('', 'Skills', skills.join(', '));
-              }
-              if (data.github.trim().length > 0 || data.linkedin.trim().length > 0) {
-                lines.push('', 'Links');
-                if (data.github.trim().length > 0) {
-                  lines.push(`GitHub: ${data.github.trim()}`);
+                const lines: string[] = [];
+                if (data.personal.name.trim().length > 0) {
+                  lines.push(data.personal.name.trim());
                 }
-                if (data.linkedin.trim().length > 0) {
-                  lines.push(`LinkedIn: ${data.linkedin.trim()}`);
-                }
-              }
 
-              await navigator.clipboard.writeText(lines.join('\n'));
-              setCopyLabel('Copied');
-              window.setTimeout(() => setCopyLabel('Copy Resume as Text'), 1600);
+                const contact = [data.personal.email, data.personal.phone, data.personal.location]
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .join(' | ');
+                if (contact.length > 0) {
+                  lines.push(`Contact: ${contact}`);
+                }
+
+                if (data.summary.trim().length > 0) {
+                  lines.push('', 'Summary', data.summary.trim());
+                }
+                if (education.length > 0) {
+                  lines.push('', 'Education');
+                  education.forEach((entry) => {
+                    const primary = [entry.degree, entry.school].map((value) => value.trim()).filter(Boolean).join(' - ');
+                    const year = entry.year.trim();
+                    lines.push(year.length > 0 ? `${primary} (${year})` : primary);
+                  });
+                }
+                if (experience.length > 0) {
+                  lines.push('', 'Experience');
+                  experience.forEach((entry) => {
+                    const heading = [entry.role, entry.company].map((value) => value.trim()).filter(Boolean).join(' - ');
+                    const duration = entry.duration.trim();
+                    lines.push(duration.length > 0 ? `${heading} (${duration})` : heading);
+                    splitBullets(entry.highlights).forEach((line) => lines.push(`- ${line}`));
+                  });
+                }
+                if (projects.length > 0) {
+                  lines.push('', 'Projects');
+                  projects.forEach((entry) => {
+                    if (entry.title.trim().length > 0) {
+                      lines.push(entry.title.trim());
+                    }
+                    splitDescriptionPoints(entry.description).forEach((point) => lines.push(`- ${point}`));
+                    if (entry.techStack.length > 0) {
+                      lines.push(`Tech Stack: ${entry.techStack.join(', ')}`);
+                    }
+                    if (entry.liveUrl.trim().length > 0) {
+                      lines.push(`Live URL: ${entry.liveUrl.trim()}`);
+                    }
+                    if (entry.githubUrl.trim().length > 0) {
+                      lines.push(`GitHub URL: ${entry.githubUrl.trim()}`);
+                    }
+                  });
+                }
+                if (skills.length > 0) {
+                  lines.push('', 'Skills', skills.join(', '));
+                }
+                if (data.github.trim().length > 0 || data.linkedin.trim().length > 0) {
+                  lines.push('', 'Links');
+                  if (data.github.trim().length > 0) {
+                    lines.push(`GitHub: ${data.github.trim()}`);
+                  }
+                  if (data.linkedin.trim().length > 0) {
+                    lines.push(`LinkedIn: ${data.linkedin.trim()}`);
+                  }
+                }
+
+                await navigator.clipboard.writeText(lines.join('\n'));
+                setCopyLabel('Copied');
+                window.setTimeout(() => setCopyLabel('Copy Resume as Text'), 1600);
+              } catch {
+                setToast('Unable to copy resume text right now. Try again.');
+                window.setTimeout(() => setToast(''), 1800);
+              }
             }}
           >
             {copyLabel}

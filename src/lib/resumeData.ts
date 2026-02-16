@@ -202,6 +202,9 @@ export const loadResumeData = (): ResumeBuilderData => {
 
 export const saveResumeData = (data: ResumeBuilderData): void => {
   localStorage.setItem(RESUME_STORAGE_KEY, JSON.stringify(data));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('resume-data-updated'));
+  }
 };
 
 const normalizeTemplate = (value: unknown): ResumeTemplate => {
@@ -217,6 +220,9 @@ export const loadResumeTemplate = (): ResumeTemplate => {
 
 export const saveResumeTemplate = (template: ResumeTemplate): void => {
   localStorage.setItem(RESUME_TEMPLATE_KEY, template);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('resume-template-updated'));
+  }
 };
 
 const normalizeAccent = (value: unknown): ResumeAccentKey => {
@@ -232,6 +238,9 @@ export const loadResumeAccent = (): ResumeAccentKey => {
 
 export const saveResumeAccent = (accent: ResumeAccentKey): void => {
   localStorage.setItem(RESUME_ACCENT_KEY, accent);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('resume-accent-updated'));
+  }
 };
 
 export const splitBullets = (text: string): string[] =>
