@@ -2,6 +2,7 @@ import { CSSProperties, useMemo, useRef, useState } from 'react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import {
+  computeAtsV1,
   createEmptyResumeData,
   getAllSkills,
   hasAnyPreviewContent,
@@ -79,6 +80,7 @@ export default function PreviewPage() {
 
   const accentTheme = RESUME_ACCENTS.find((item) => item.key === accent) ?? RESUME_ACCENTS[0];
   const skills = useMemo(() => getAllSkills(data), [data]);
+  const ats = useMemo(() => computeAtsV1(data), [data]);
   const education = useMemo(() => data.education.filter(isEducationVisible), [data.education]);
   const experience = useMemo(() => data.experience.filter(isExperienceVisible), [data.experience]);
   const projects = useMemo(() => data.projects.filter(isProjectVisible), [data.projects]);
@@ -86,6 +88,16 @@ export default function PreviewPage() {
   const [copyLabel, setCopyLabel] = useState<string>('Copy Resume as Text');
   const [warning, setWarning] = useState<string>('');
   const [toast, setToast] = useState<string>('');
+
+  const scoreBand = useMemo(() => {
+    if (ats.score <= 40) {
+      return { label: 'Needs Work', className: 'score-low' as const };
+    }
+    if (ats.score <= 70) {
+      return { label: 'Getting There', className: 'score-mid' as const };
+    }
+    return { label: 'Strong Resume', className: 'score-high' as const };
+  }, [ats.score]);
 
   const renderCommonMainContent = () => (
     <>
@@ -151,8 +163,8 @@ export default function PreviewPage() {
                   </div>
                 )}
                 <div className="project-links">
-                  {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">↗ Live</a>}
-                  {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">⌘ Code</a>}
+                  {entry.liveUrl.trim().length > 0 && <a href={entry.liveUrl.trim()} target="_blank" rel="noreferrer">Live URL</a>}
+                  {entry.githubUrl.trim().length > 0 && <a href={entry.githubUrl.trim()} target="_blank" rel="noreferrer">GitHub</a>}
                 </div>
               </article>
             ))}
@@ -263,6 +275,29 @@ export default function PreviewPage() {
             />
           ))}
         </div>
+
+        <section className="preview-score-card" aria-live="polite">
+          <div className={`score-ring ${scoreBand.className}`} style={{ ['--score-value' as string]: `${ats.score}` }}>
+            <div className="score-core">{ats.score}</div>
+          </div>
+          <div className="score-meta">
+            <h3>ATS Resume Score</h3>
+            <p>{scoreBand.label}</p>
+          </div>
+        </section>
+
+        <section className="preview-suggestions-card">
+          <h3>Improvement Suggestions</h3>
+          {ats.suggestions.length > 0 ? (
+            <ul>
+              {ats.suggestions.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : (
+            <p>No major gaps detected.</p>
+          )}
+        </section>
 
         <div className="preview-toolbar">
           <button

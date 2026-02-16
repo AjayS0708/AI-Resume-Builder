@@ -259,18 +259,12 @@ export const getAllSkills = (data: ResumeBuilderData): string[] => {
   return Array.from(new Set(combined.map((item) => item.trim()).filter(Boolean)));
 };
 
-const countWords = (text: string): number =>
-  text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
-
 const hasMeaningfulExperience = (entry: ExperienceEntry): boolean =>
   [entry.company, entry.role, entry.duration, entry.highlights].some((value) => value.trim().length > 0);
 
 const hasMeaningfulProject = (entry: ProjectEntry): boolean =>
   [entry.title, entry.description, entry.liveUrl, entry.githubUrl, entry.highlights]
     .some((value) => value.trim().length > 0) || entry.techStack.length > 0;
-
-const hasCompleteEducation = (entry: EducationEntry): boolean =>
-  entry.school.trim().length > 0 && entry.degree.trim().length > 0 && entry.year.trim().length > 0;
 
 const containsNumericImpact = (text: string): boolean => /(\d+\s?%|\b\d+\b|\d+[xX]|\d+\s?[kK])/.test(text);
 
@@ -294,63 +288,97 @@ export const startsWithActionVerb = (line: string): boolean => {
 export const hasNumericIndicator = (line: string): boolean => containsNumericImpact(line);
 
 export const computeAtsV1 = (data: ResumeBuilderData): AtsResult => {
-  const summaryWords = countWords(data.summary);
+  const summary = data.summary.trim();
+  const summaryChars = summary.length;
+  const summaryHasActionVerb = ACTION_VERBS.some((verb) =>
+    new RegExp(`\\b${verb}\\b`, 'i').test(summary)
+  );
   const projectEntries = data.projects.filter(hasMeaningfulProject);
   const experienceEntries = data.experience.filter(hasMeaningfulExperience);
+  const hasExperienceWithBullets = experienceEntries.some((entry) => splitBullets(entry.highlights).length > 0);
+  const hasEducation = data.education.some((entry) =>
+    [entry.school, entry.degree, entry.year].some((value) => value.trim().length > 0)
+  );
   const skillsItems = getAllSkills(data);
-  const hasLink = data.github.trim().length > 0 || data.linkedin.trim().length > 0;
-  const completeEducation = data.education.some(hasCompleteEducation);
-
-  const impactLines = [
-    ...experienceEntries.flatMap((entry) => splitBullets(entry.highlights)),
-    ...projectEntries.map((entry) => entry.description.trim()),
-    ...projectEntries.flatMap((entry) => splitBullets(entry.highlights))
-  ].filter(Boolean);
-  const hasImpactNumbers = impactLines.some(containsNumericImpact);
+  const hasName = data.personal.name.trim().length > 0;
+  const hasEmail = data.personal.email.trim().length > 0;
+  const hasPhone = data.personal.phone.trim().length > 0;
+  const hasLinkedin = data.linkedin.trim().length > 0;
+  const hasGithub = data.github.trim().length > 0;
 
   let score = 0;
-  if (summaryWords >= 40 && summaryWords <= 120) {
+  if (hasName) {
+    score += 10;
+  }
+  if (hasEmail) {
+    score += 10;
+  }
+  if (summaryChars > 50) {
+    score += 10;
+  }
+  if (hasExperienceWithBullets) {
     score += 15;
   }
-  if (projectEntries.length >= 2) {
+  if (hasEducation) {
     score += 10;
   }
-  if (experienceEntries.length >= 1) {
+  if (skillsItems.length >= 5) {
     score += 10;
   }
-  if (skillsItems.length >= 8) {
+  if (projectEntries.length >= 1) {
     score += 10;
   }
-  if (hasLink) {
-    score += 10;
+  if (hasPhone) {
+    score += 5;
   }
-  if (hasImpactNumbers) {
-    score += 15;
+  if (hasLinkedin) {
+    score += 5;
   }
-  if (completeEducation) {
+  if (hasGithub) {
+    score += 5;
+  }
+  if (summaryHasActionVerb) {
     score += 10;
   }
 
   const suggestions: string[] = [];
-  if (!(summaryWords >= 40 && summaryWords <= 120)) {
-    suggestions.push('Write a stronger summary (40-120 words).');
+  if (!hasName) {
+    suggestions.push('Add your full name (+10 points).');
   }
-  if (projectEntries.length < 2) {
-    suggestions.push('Add at least 2 projects.');
+  if (!hasEmail) {
+    suggestions.push('Add your email address (+10 points).');
   }
-  if (!hasImpactNumbers) {
-    suggestions.push('Add measurable impact (numbers) in bullets.');
+  if (!(summaryChars > 50)) {
+    suggestions.push('Add a professional summary (+10 points).');
   }
-  if (skillsItems.length < 8) {
-    suggestions.push('Add more skills (target 8+).');
+  if (!hasExperienceWithBullets) {
+    suggestions.push('Add one experience entry with bullets (+15 points).');
   }
-  if (!hasLink) {
-    suggestions.push('Add GitHub or LinkedIn link.');
+  if (!hasEducation) {
+    suggestions.push('Add at least one education entry (+10 points).');
+  }
+  if (skillsItems.length < 5) {
+    suggestions.push('Add at least 5 skills (+10 points).');
+  }
+  if (projectEntries.length < 1) {
+    suggestions.push('Add at least one project (+10 points).');
+  }
+  if (!hasPhone) {
+    suggestions.push('Add a phone number (+5 points).');
+  }
+  if (!hasLinkedin) {
+    suggestions.push('Add a LinkedIn URL (+5 points).');
+  }
+  if (!hasGithub) {
+    suggestions.push('Add a GitHub URL (+5 points).');
+  }
+  if (!summaryHasActionVerb) {
+    suggestions.push('Use action verbs in summary (+10 points).');
   }
 
   return {
     score: Math.min(100, score),
-    suggestions: suggestions.slice(0, 3),
+    suggestions,
     allCriteriaMet: suggestions.length === 0
   };
 };
@@ -369,32 +397,5 @@ export const hasAnyPreviewContent = (data: ResumeBuilderData): boolean => {
 };
 
 export const computeTopImprovements = (data: ResumeBuilderData): string[] => {
-  const summaryWords = countWords(data.summary);
-  const projectEntries = data.projects.filter(hasMeaningfulProject);
-  const experienceEntries = data.experience.filter(hasMeaningfulExperience);
-  const skillsItems = getAllSkills(data);
-  const impactLines = [
-    ...experienceEntries.flatMap((entry) => splitBullets(entry.highlights)),
-    ...projectEntries.map((entry) => entry.description.trim()),
-    ...projectEntries.flatMap((entry) => splitBullets(entry.highlights))
-  ].filter(Boolean);
-  const hasImpactNumbers = impactLines.some(containsNumericImpact);
-
-  const items: string[] = [];
-  if (projectEntries.length < 2) {
-    items.push('Add at least 2 projects.');
-  }
-  if (!hasImpactNumbers) {
-    items.push('Add measurable impact (numbers) in bullets.');
-  }
-  if (summaryWords < 40) {
-    items.push('Expand summary to at least 40 words.');
-  }
-  if (skillsItems.length < 8) {
-    items.push('Add more skills (target 8+).');
-  }
-  if (experienceEntries.length === 0) {
-    items.push('Add internship or project-based experience.');
-  }
-  return items.slice(0, 3);
+  return computeAtsV1(data).suggestions.slice(0, 3);
 };
