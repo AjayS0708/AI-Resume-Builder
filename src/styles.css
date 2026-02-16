@@ -989,6 +989,49 @@ h4 {
   width: min(860px, 100%);
 }
 
+.rb-proof-list,
+.rb-proof-checklist {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+
+.rb-proof-list li,
+.rb-proof-checklist li {
+  margin-bottom: 6px;
+}
+
+.rb-proof-checklist label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+.rb-proof-checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+.rb-proof-checklist li {
+  margin-bottom: var(--space-2);
+}
+
+.rb-proof-checklist input[type='checkbox'] {
+  width: auto;
+  margin: 3px 0 0;
+}
+
+.rb-proof-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.rb-proof-success {
+  margin: 0;
+  color: #1e6b42;
+  font-weight: 600;
+}
+
 @media (max-width: 980px) {
   .rb-work-grid {
     grid-template-columns: 1fr;
